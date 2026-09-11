@@ -683,6 +683,11 @@ def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate
     if not outputs:
         raise RuntimeError('every agent failed in round %s: %s'
                            % (round_index, '; '.join(failures)))
+    # Casualties stay in the trace as failed phases but leave run.phases: SSSF's finish()
+    # requires every phase there to pass, which recorded an accepted 20-agent swarm as failed
+    # and exited 1 for losing five agents.
+    lost = {id(p) for p in phases.values() if p.status != 'success'}
+    run.phases[:] = [p for p in run.phases if id(p) not in lost]
     return outputs
 
 
