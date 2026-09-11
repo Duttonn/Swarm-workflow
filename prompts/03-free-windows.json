@@ -1,0 +1,17 @@
+{
+  "prompt": "Calculer les plages libres dans une fenetre horaire a partir de reservations qui peuvent se chevaucher.",
+  "definition_of_done": "Le champ code contient un module solution.py complet exposant solve(window, busy). Les 11 cas de test_acceptance.py passent via `python -I -m unittest discover -s <deliverable> -v` avec exit code 0. Intervalles semi-ouverts [start,end): les busy sont valides AVANT clipping y compris hors fenetre, puis clippes, fusionnes si chevauchants ou jointifs, les busy de longueur nulle sont ignores. Fenetre de longueur nulle renvoie []. Les plages libres renvoyees sont maximales, triees et non vides. Aucun import hors stdlib, aucun acces reseau, aucune ecriture de fichier, aucun appel a des outils. Les entrees passees a solve ne sont jamais modifiees: elles comparent egales apres l'appel. Toute entree invalide leve ValueError, jamais TypeError, IndexError ou KeyError. Si le contrat est impossible a satisfaire, renvoyer status='failure' avec la raison precise plutot qu'un code partiel ou des tests contournes.",
+  "contract": "solve(window, busy) accepts window=[start,end] and a list of busy intervals. Use half-open intervals [start,end), integer endpoints excluding bool. Validate every interval (exactly two ints, start<=end), including out-of-window entries. Clip busy intervals to the window, merge overlap and touching, ignore zero-length busy intervals. Return maximal sorted nonempty free intervals as lists. Zero-length window returns []. Do not mutate inputs. Invalid intervals raise ValueError.",
+  "tests": "import unittest\nfrom solution import solve\n\nclass Acceptance(unittest.TestCase):\n    def test_empty(self): self.assertEqual(solve([0,10], []), [[0,10]])\n    def test_full(self): self.assertEqual(solve([0,10], [[-2,12]]), [])\n    def test_overlap(self): self.assertEqual(solve([0,10], [[2,5],[4,7]]), [[0,2],[7,10]])\n    def test_touch(self): self.assertEqual(solve([0,10], [[1,3],[3,6]]), [[0,1],[6,10]])\n    def test_clip(self): self.assertEqual(solve([0,10], [[-2,2],[8,14]]), [[2,8]])\n    def test_outside(self): self.assertEqual(solve([0,10], [[-5,-2],[12,20]]), [[0,10]])\n    def test_zero(self): self.assertEqual(solve([0,10], [[3,3]]), [[0,10]])\n    def test_window_zero(self): self.assertEqual(solve([5,5], [[0,10]]), [])\n    def test_unsorted(self): self.assertEqual(solve([0,10], [[7,8],[2,3]]), [[0,2],[3,7],[8,10]])\n    def test_invalid(self):\n        for busy in ([[9,2]], [[False,2]], [[1]], [['1',2]], [[20,11]]):\n            with self.subTest(busy=busy), self.assertRaises(ValueError): solve([0,10], busy)\n    def test_unchanged(self):\n        data=[[7,8],[2,3]]; solve([0,10],data); self.assertEqual(data,[[7,8],[2,3]])\n \nif __name__ == \"__main__\": unittest.main()\n",
+  "concepts": [
+    "intervals",
+    "validation",
+    "sorting",
+    "pure-python"
+  ],
+  "context": {
+    "language": "python",
+    "framework": "stdlib",
+    "platform": "portable"
+  }
+}

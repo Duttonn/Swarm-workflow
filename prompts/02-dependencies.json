@@ -1,0 +1,17 @@
+{
+  "prompt": "Implementer un ordre de construction deterministe pour un graphe de dependances et detecter les cycles.",
+  "definition_of_done": "Le champ code contient un module solution.py complet exposant solve(graph). Les 9 cas de test_acceptance.py passent via `python -I -m unittest discover -s <deliverable> -v` avec exit code 0. L'ordre est un Kahn deterministe: a chaque etape le plus petit noeud disponible en ordre lexicographique. Les dependances absentes des cles sont incluses, les doublons comptent une fois, cycle et self-loop levent ValueError. Aucun import hors stdlib, aucun acces reseau, aucune ecriture de fichier, aucun appel a des outils. Les entrees passees a solve ne sont jamais modifiees: elles comparent egales apres l'appel. Toute entree invalide leve ValueError, jamais TypeError, IndexError ou KeyError. Si le contrat est impossible a satisfaire, renvoyer status='failure' avec la raison precise plutot qu'un code partiel ou des tests contournes.",
+  "contract": "solve(graph) takes a dict mapping string nodes to lists of dependency node names. Include dependencies absent as keys. Return a topological order with dependencies before users; choose lexicographically smallest currently available node (Kahn). Duplicate dependencies count once. Empty returns []. A cycle or self-loop raises ValueError. Do not mutate input.",
+  "tests": "import unittest\nfrom solution import solve\n\nclass Acceptance(unittest.TestCase):\n    def test_empty(self): self.assertEqual(solve({}), [])\n    def test_chain(self): self.assertEqual(solve({'app':['lib'],'lib':['core']}), ['core','lib','app'])\n    def test_lexical(self): self.assertEqual(solve({'z':[],'a':[],'b':[]}), ['a','b','z'])\n    def test_available_order(self): self.assertEqual(solve({'b':['a'],'z':[],'a':[]}), ['a','b','z'])\n    def test_diamond(self): self.assertEqual(solve({'d':['b','c'],'b':['a'],'c':['a']}), ['a','b','c','d'])\n    def test_duplicate(self): self.assertEqual(solve({'b':['a','a']}), ['a','b'])\n    def test_cycle(self):\n        with self.assertRaises(ValueError): solve({'a':['b'],'b':['a']})\n    def test_self(self):\n        with self.assertRaises(ValueError): solve({'a':['a']})\n    def test_unchanged(self):\n        data={'b':['a','a']}; solve(data); self.assertEqual(data, {'b':['a','a']})\n \nif __name__ == \"__main__\": unittest.main()\n",
+  "concepts": [
+    "dependency-graph",
+    "validation",
+    "topological-sort",
+    "pure-python"
+  ],
+  "context": {
+    "language": "python",
+    "framework": "stdlib",
+    "platform": "portable"
+  }
+}
