@@ -84,6 +84,38 @@ procs ADW_ID:
 # Needs bun. The db path is passed explicitly because the server runs from the
 # app dir and would otherwise look for a trace db sitting next to itself.
 
-# boot the trace UI, http://localhost:4601 (api on :4600)
+# serve the built trace UI on http://127.0.0.1:4600
 obs:
-    cd .claude/skills/sssf/apps/visualizer && bun install && (SSSF_DB={{justfile_directory()}}/{{db}} bun run server/index.ts &) && bunx vite
+    bun run .claude/skills/sssf/apps/visualizer/server/index.ts
+
+# run a Gemini 3.8 Flash peer swarm through AGY, then extract its blueprint
+swarm *ARGS:
+    python adws/adw_agy_swarm.py "$@"
+
+# extract, search or prepare reusable context from SSSF traces
+blueprint *ARGS:
+    python -m swarm_workbench "$@"
+
+# live terminal view: just monitor (all swarms) | just monitor latest | just monitor <adw_id>
+monitor *ARGS:
+    python -m swarm_workbench monitor "$@"
+
+# Python stdlib only, so no bun and nothing to install. Separate app from
+# `just obs` on 4600, and read-only like everything else that reads the trace.
+# Pass anything through: just swarm-ui --port 5999 --open
+
+# swarms/threads/agents UI on http://127.0.0.1:5178
+swarm-ui *ARGS:
+    python -m swarm_workbench webui --db {{db}} "$@"
+
+# build the per-swarm sandbox image (needs Docker Desktop running)
+sandbox-build:
+    python -c "import sys; sys.path.insert(0,'adws'); from adw_modules.docker_sandbox import build_image; print(build_image('sandbox.Dockerfile','.'))"
+
+# verify blueprint invariants without making model calls
+check:
+    python -m unittest discover -s work/tests -v
+    python -m swarm_workbench monitor --self-check
+    python -m swarm_workbench webui --self-check
+    python adws/adw_modules/docker_sandbox.py
+    bun run --cwd .claude/skills/sssf/apps/visualizer build
