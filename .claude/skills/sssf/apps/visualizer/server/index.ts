@@ -10,13 +10,14 @@
  *   bun run server/index.ts --db /path/to/repo/adws/adw_data/sssf.db
  *   SSSF_DB=/path/to/sssf.db PORT=4600 bun run server/index.ts
  */
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { SssfDb, resolveDbPath } from "./db.ts";
 import type { AgentPrompts, ApiError, HealthResponse } from "../shared/types.ts";
 
 const PORT = Number(process.env.PORT ?? 4600);
 const DIST_DIR = resolve(import.meta.dir, "..", "dist");
+const BLUEPRINT_DIR = resolve(process.env.SSSF_BLUEPRINTS ?? "blueprints");
 
 const dbPath = resolveDbPath();
 let db: SssfDb;
@@ -94,7 +95,7 @@ async function serveStatic(req: Request): Promise<Response> {
 
   // Reject traversal before touching the filesystem.
   const candidate = resolve(join(DIST_DIR, pathname));
-  if (candidate === DIST_DIR || candidate.startsWith(DIST_DIR + "/")) {
+  if (candidate === DIST_DIR || candidate.startsWith(DIST_DIR + sep)) {
     if (existsSync(candidate) && statSync(candidate).isFile()) {
       return new Response(Bun.file(candidate));
     }
@@ -112,7 +113,12 @@ async function serveStatic(req: Request): Promise<Response> {
 
 const server = Bun.serve({
   port: PORT,
+  hostname: "127.0.0.1",
   routes: {
+    "/api/blueprints": safely(() => json(existsSync(BLUEPRINT_DIR)
+      ? readdirSync(BLUEPRINT_DIR).filter(name => /^bp-[a-f0-9]+\.json$/.test(name))
+        .map(name => JSON.parse(readFileSync(join(BLUEPRINT_DIR, name), "utf8")))
+      : [])),
     "/api/health": safely(
       () =>
         json({

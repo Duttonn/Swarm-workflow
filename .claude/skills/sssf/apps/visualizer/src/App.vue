@@ -2,6 +2,7 @@
 import { useRoute, hrefFor, phaseCrumb } from './lib/router'
 import SessionsList from './components/SessionsList.vue'
 import SessionTrace from './components/SessionTrace.vue'
+import BlueprintPanel from './components/BlueprintPanel.vue'
 
 const route = useRoute()
 </script>
@@ -20,7 +21,8 @@ const route = useRoute()
         <span class="brand">Super Simple Software Factory</span>
         <span class="sep">›</span>
         <a :href="hrefFor()" :class="{ current: !route.adwId }">sessions</a>
-        <template v-if="route.adwId">
+        <a href="#/blueprints" :class="{ current: route.adwId === 'blueprints' }">blueprints</a>
+        <template v-if="route.adwId && route.adwId !== 'blueprints'">
           <span class="sep">›</span>
           <a :href="hrefFor(route.adwId)" :class="{ current: !route.phaseId }">{{
             route.adwId
@@ -34,7 +36,8 @@ const route = useRoute()
       <span class="live-hint"><span class="live-dot" /> live</span>
     </header>
     <main>
-      <SessionsList v-if="!route.adwId" />
+      <BlueprintPanel v-if="route.adwId === 'blueprints'" />
+      <SessionsList v-else-if="!route.adwId" />
       <SessionTrace v-else :key="route.adwId" :adw-id="route.adwId" :phase-id="route.phaseId" />
     </main>
   </div>
