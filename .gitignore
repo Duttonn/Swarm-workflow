@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.venv/
+data/
+tools/
+work/
+
+# sssf runtime
+adws/adw_data/sessions/
+adws/adw_data/sssf.db*
+.env
+
+# dependencies, build output, machine-local files
+node_modules/
+.claude/skills/sssf/apps/visualizer/dist/
+.claude/settings.local.json
+skill/
+
+# distilled from local runs
+blueprints/*.json
