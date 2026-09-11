@@ -104,6 +104,7 @@ class AgentRequest:
     timeout: int = CALL_TIMEOUT
     delay: float = 0.0
     shared: tuple = ()          # extra directories the agent may read and write
+    sandbox: object = None      # the swarm's SwarmSandbox to exec in; None runs on the host
 
     @property
     def scratch(self) -> Path:
@@ -203,18 +204,27 @@ def invoke_gemini(req: AgentRequest, messages, cancel):
     """Gemini CLI in stream-json. The result event carries stats but NO text: the reply
     arrives as assistant `message` events, so it has to be accumulated."""
     write_gemini_settings(req.folder)
-    argv = [gemini_path(), '-m', req.model, '--yolo', '--skip-trust',
-            '-o', 'stream-json']
+    box = req.sandbox
+    if box:
+        from .docker_sandbox import docker_env, docker_path
+        # The key goes by name: docker exec copies it from this process's environment, so it
+        # never appears in argv or in `docker inspect`. `timeout` runs inside the container
+        # because killing the docker client does not kill what it started in there.
+        argv = [docker_path(), 'exec', '-i', '-e', 'GEMINI_API_KEY', '-w', box.inside(req.folder),
+                box.name, 'timeout', str(req.timeout), 'gemini']
+    else:
+        argv = [gemini_path()]
+    argv += ['-m', req.model, '--yolo', '--skip-trust', '-o', 'stream-json']
     # Gemini scopes the workspace to cwd. Without this the board sits outside it, glob and
     # read_file are refused, and the agent wastes the turn working around the boundary with
     # run_shell_command (which the boundary does not stop - it is not a sandbox).
     for extra in req.shared:
-        argv += ['--include-directories', str(extra)]
+        argv += ['--include-directories', box.inside(extra) if box else str(extra)]
     # The brief rides stdin; -p only keeps non-interactive mode on. Passing the whole prompt
     # in argv hit "The command line is too long." as soon as round 2 appended the mailbox.
     argv += ['-p', 'Follow the brief above exactly and end with the required json block.']
     with (req.folder / 'stderr.log').open('w', encoding='utf-8') as err:
-        proc = spawn(argv, req, err, stdin=True, env=gemini_env())
+        proc = spawn(argv, req, err, stdin=True, env=docker_env() if box else gemini_env())
         messages.put((req.agent, {'event': 'process_start', 'pid': proc.pid}))
         watch(proc, cancel, req.timeout)
         try:
@@ -676,7 +686,40 @@ def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate
     return outputs
 
 
+# auto: agents exec in one container per swarm when they can authenticate there, otherwise on
+# the host with a loud warning. docker: refuse to run agents on the host. host: never contain.
+AGENT_SANDBOX = os.environ.get('SWARM_AGENT_SANDBOX', 'auto')
+
+
+def agent_sandbox(run):
+    """The swarm's one container, or None when agents run on the host.
+
+    The host CLI keeps its key in the OS keychain, which the container cannot reach, so
+    GEMINI_API_KEY has to be in the environment (.env) for agents to authenticate in there."""
+    if AGENT_SANDBOX == 'host':
+        return None
+    missing = [why for why, ok in (('GEMINI_API_KEY is not set', os.environ.get('GEMINI_API_KEY')),
+                                   ('runner is not gemini', RUNNER == 'gemini'),
+                                   ('docker is not running', docker_ready())) if not ok]
+    if missing:
+        if AGENT_SANDBOX == 'docker':
+            raise SandboxUnavailable('agents cannot run in the container: ' + ', '.join(missing))
+        print('WARNING: agents run on the HOST with full tool access (%s)' % ', '.join(missing),
+              file=sys.stderr)
+        return None
+    return SwarmSandbox(f'{run.adw_id}-agents', Path(run.session_dir).resolve()).start()
+
+
 def execute_swarm(run, spec, warm=None):
+    box = agent_sandbox(run)
+    try:
+        return run_swarm(run, spec, warm, box)
+    finally:
+        if box:
+            box.stop()
+
+
+def run_swarm(run, spec, warm, box):
     # Roster comes from the spec so a swarm can be 3 agents or 20. Names carry intent:
     # the video's agents named themselves and encoded their slice in the name, so seeding
     # distinct role names is the cheap version of the same thing.
@@ -688,9 +731,9 @@ def execute_swarm(run, spec, warm=None):
         'definition_of_done':spec['definition_of_done'], 'context':spec.get('context',{}),
         'agents':roster, 'model':MODEL, 'cost_available':False,
         'budget_tokens':budget_cap(spec), 'runner':RUNNER,
-        'sandbox':{'kind':RUNNER, 'mode':MODE, 'root':str(root),
-                   'isolation':'per-agent HOME redirect', 'network':'model API reachable',
-                   'permissions':'skipped' if SKIP_PERMISSIONS else 'prompted (headless auto-deny)'},
+        'sandbox':{'agents':'docker:' + box.name if box else 'host',
+                   'network':box.network if box else 'host', 'root':str(root),
+                   'acceptance':'docker network=none when available'},
         'limits':{'agents':len(roster),'peer_rounds':2,
                   'max_calls':len(roster)*2+1,'call_timeout_seconds':CALL_TIMEOUT}})
     base = ('You are running inside a private sandbox. Write files and run commands there freely: '
@@ -733,13 +776,14 @@ def execute_swarm(run, spec, warm=None):
         trace(run, '', 'budget', 'round-%d' % rnd,
               {'spent':run.tokens, 'cap':cap, 'round':rnd})
         prompts = []
+        shown = box.inside if box else str   # paths as the agent will see them
         for agent in roster:
             workspace = (root/agent/f'round-{rnd}').resolve()
             # agy ignores cwd and writes into its own scratch unless the prompt names an
             # absolute path, so state it. Without this the files land somewhere shared and
             # a stale file from an earlier run reads as this run's evidence.
-            prompt = (base + head + board_protocol(board, agent)
-                      + f'YOUR WORKSPACE (write your own files here, absolute): {workspace}\n'
+            prompt = (base + head + board_protocol(shown(board), agent)
+                      + f'YOUR WORKSPACE (write your own files here, absolute): {shown(workspace)}\n'
                       f'Your role: {agent}. ')
             if rnd == 1:
                 prompt += 'Propose a complete solution independently, emphasizing your role. '
@@ -751,12 +795,13 @@ def execute_swarm(run, spec, warm=None):
                            'publish an improved complete module for the shared goal.\nPEER MAILBOX:\n'
                            + mailbox(prior))
             prompts.append(AgentRequest(agent,prompt,root/agent/f'round-{rnd}',
-                                        delay=STAGGER*len(prompts), shared=(board,)))
+                                        delay=STAGGER*len(prompts), shared=(board,), sandbox=box))
         seen_before = {p['file'] for p in board_posts(board)}
         fresh = peer_round(run,prompts,rnd,started=time.time(),cap=cap,board=board)
         suffix = Path(spec.get('output_file','solution.py')).suffix or '.txt'
         for who, item in fresh.items():
             item.update(publish_code(board, who, rnd, item.get('code',''), suffix))
+            item['code_file'] = shown(item['code_file'])
         # An agent that answered in round 1 but went quiet in round 2 keeps its earlier
         # proposal: losing a survivor's whole contribution because one turn returned nothing
         # would hand the integrator less than the swarm actually produced.
@@ -774,13 +819,14 @@ def execute_swarm(run, spec, warm=None):
     # The integrator runs even past the cap: one call that turns what the swarm spent into a
     # deliverable, instead of a capped run that paid for proposals and ships nothing.
     trace(run, '', 'budget', 'integration', {'spent':run.tokens, 'cap':cap})
-    final_prompt = (base + budget_line(run, cap) + board_protocol(board, 'integrator')
-                    + f'YOUR WORKSPACE (write every file here, absolute): {(root/"integrator").resolve()}\n'
+    shown = box.inside if box else str
+    final_prompt = (base + budget_line(run, cap) + board_protocol(shown(board), 'integrator')
+                    + f'YOUR WORKSPACE (write every file here, absolute): {shown(root/"integrator")}\n'
                     'Integrate the peer proposals into one complete implementation. Each entry below\n'
                     'names a code_file on the board: READ THOSE FILES, they hold the actual code.\n'
                     + mailbox(prior))
     final = peer_round(run,[AgentRequest('integrator',final_prompt,root/'integrator',
-                                         shared=(board,))],3,
+                                         shared=(board,), sandbox=box)],3,
                        started=time.time(),cap=cap,board=board,gate=False)['integrator']
     output = root/'deliverable'; output.mkdir(exist_ok=True)
     with run.phase(PhaseParams(name='materialize',kind='code',owner='runtime',

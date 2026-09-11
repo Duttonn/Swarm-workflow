@@ -111,6 +111,11 @@ class SwarmSandbox:
             raise SandboxUnavailable(f'container exited immediately: {detail[-500:]}')
         return self
 
+    def inside(self, host):
+        """Where a host path under the workspace appears inside the container."""
+        rel = Path(host).resolve().relative_to(self.workspace.resolve()).as_posix()
+        return WORKDIR if rel == '.' else f'{WORKDIR}/{rel}'
+
     def exec(self, argv, timeout=300, workdir=None, stdin=None):
         if not self.container:
             raise SandboxUnavailable('sandbox not started')
@@ -156,6 +161,8 @@ def demo():
         with SwarmSandbox(run_id, workspace, image='python:3.12-slim') as box:
             seen = box.exec(['cat', f'{WORKDIR}/seed.txt'])
             assert seen.stdout.strip() == 'seed', seen
+            assert box.inside(workspace) == WORKDIR
+            assert box.inside(workspace / 'a' / 'b.txt') == f'{WORKDIR}/a/b.txt'
             wrote = box.exec(['python', '-c',
                               f'open("{WORKDIR}/made.txt","w").write("from-container")'])
             assert wrote.returncode == 0, wrote.stderr
