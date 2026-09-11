@@ -1,0 +1,3 @@
+# The sandbox image needs no repo content: it is a clean box the harness mounts into.
+# Without this the build context would ship .venv, node_modules and every trace db.
+*
