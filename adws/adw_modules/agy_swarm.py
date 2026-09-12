@@ -675,6 +675,11 @@ def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate
 # auto: agents exec in one container per swarm when they can authenticate there, otherwise on
 # the host with a loud warning. docker: refuse to run agents on the host. host: never contain.
 AGENT_SANDBOX = os.environ.get('SWARM_AGENT_SANDBOX', 'auto')
+# Cumulative ceilings on the cap, per stage. Without them the build stage eats the whole
+# budget - measured at 1.2M tokens per part agent - and the reviews the design depends on are
+# refused one by one. The finisher is never gated: a run must end with a deliverable.
+PARTS_SHARE = float(os.environ.get('SWARM_PARTS_SHARE', '0.60'))
+REVIEW_SHARE = float(os.environ.get('SWARM_REVIEW_SHARE', '0.85'))
 
 
 def agent_sandbox(run):
@@ -887,7 +892,8 @@ def run_swarm(run, spec, warm, box):
         prompts.append(AgentRequest(agent, brief(agent, workspace, task), workspace,
                                     delay=STAGGER * len(prompts), shared=(board,), sandbox=box))
     try:
-        made = peer_round(run, prompts, 1, started=time.time(), cap=cap, board=board)
+        made = peer_round(run, prompts, 1, started=time.time(),
+                          cap=int(cap * PARTS_SHARE), board=board)
     except RuntimeError as exc:
         # No block landed: the draft is still a deliverable, so ship it rather than
         # throwing away the prototype the swarm already paid for.
@@ -925,7 +931,8 @@ def run_swarm(run, spec, warm, box):
         prompts.append(AgentRequest(agent, brief(agent, workspace, review_task), workspace,
                                     delay=STAGGER * len(prompts), shared=(board,), sandbox=box))
     try:
-        reviews = peer_round(run, prompts, 2, started=time.time(), cap=cap, board=board)
+        reviews = peer_round(run, prompts, 2, started=time.time(),
+                             cap=int(cap * REVIEW_SHARE), board=board)
     except RuntimeError as exc:
         reviews = {}
         print('no review landed: %s' % exc, file=sys.stderr)
