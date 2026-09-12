@@ -995,13 +995,17 @@ def run_swarm(run, spec, warm, box):
 
     # 3. everyone reads the assembly: their own part in context, and the whole against the tests
     review_task = (
-        'REVIEW TURN. The assembled file is on the board at %s: read it.\n'
-        'Do NOT rewrite it and do not produce your own version - paying twenty agents to each '
-        'rebuild the same file is exactly what this stage replaces. Judge your own part in '
-        'context, then the whole against the contract and the definition of done. Run it.\n'
-        'code = "" (an empty string).\n'
-        'Put every concrete defect in risks, one per entry, as: part:NAME - what is wrong - how '
-        'to fix it. Start summary with ACCEPT or FIX.\n' % shown(assembled_path))
+        'REVIEW TURN, and a cheap one: six tool calls at most, and no rewriting.\n'
+        'The assembled file is at %s. The acceptance suite the harness will run at the end is '
+        'already on the board at %s - run it once rather than inventing your own checks.\n'
+        'Read the file once, run the suite once, judge your own part in context and then the '
+        'whole against the contract. Do NOT produce your own version of the file: paying every '
+        'agent to rebuild it is exactly what this stage replaces. Write nothing but one short '
+        'board note.\n'
+        'code = "" (an empty string). summary starts with ACCEPT or FIX and stays under 150 '
+        'words. Every concrete defect goes in risks, one per entry, as: part:NAME - what is '
+        'wrong - how to fix it. Nothing worth naming means an empty risks list, not padding.\n'
+        % (shown(assembled_path), shown(tests_path)))
     prompts = []
     for agent in roster:
         workspace = (root / agent / 'review').resolve()
