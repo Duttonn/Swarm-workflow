@@ -411,6 +411,53 @@ if __name__ == "__main__":
 """
 
 
+VERIFY_TOOL = '''#!/usr/bin/env python3
+"""Check your block against the real acceptance tests. Run me: python verify.py
+
+Writes nothing outside a temp directory: it splices your block into the draft and runs the
+same suite the harness runs at the end, so you never have to invent your own check.
+"""
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+DRAFT = r"{draft}"
+TESTS = r"{tests}"
+BLOCK = r"{block}"
+NAME = "{name}"
+OUT = "{out}"
+
+OPEN = re.compile(r"(?:<!--|//|#)[ \\t]*part:" + NAME + r"[ \\t]*(?:-->)?")
+CLOSE = re.compile(r"(?:<!--|//|#)[ \\t]*/part:" + NAME + r"[ \\t]*(?:-->)?")
+
+
+def main():
+    draft = Path(DRAFT).read_text(encoding="utf-8")
+    if not Path(BLOCK).exists():
+        sys.exit("write your block to %s first" % BLOCK)
+    block = Path(BLOCK).read_text(encoding="utf-8")
+    opened, closed = OPEN.search(draft), CLOSE.search(draft)
+    if not opened or not closed:
+        sys.exit("the draft has no part:%s block" % NAME)
+    spliced = draft[:opened.end()] + "\\n" + block.strip("\\n") + "\\n" + draft[closed.start():]
+    with tempfile.TemporaryDirectory() as tmp:
+        Path(tmp, OUT).write_text(spliced, encoding="utf-8")
+        shutil.copy(TESTS, Path(tmp, "test_acceptance.py"))
+        done = subprocess.run([sys.executable, "-I", "-m", "unittest", "discover", "-s", "."],
+                              cwd=tmp, capture_output=True, text=True)
+    print(done.stdout + done.stderr)
+    print("VERDICT:", "the file passes with your block in it" if done.returncode == 0
+          else "FAILING with your block spliced in - fix your block, not the rest")
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
 def write_budget_tool(board):
     (Path(board) / 'budget.py').write_text(BUDGET_TOOL, encoding='utf-8')
 
@@ -875,26 +922,36 @@ def run_swarm(run, spec, warm, box):
     print('prototype cut %d blocks: %s | reviewers: %s'
           % (len(owners), ', '.join(owners), ', '.join(reviewers) or 'none'), file=sys.stderr)
     seen_before = {p['file'] for p in board_posts(board)}
+    # The acceptance suite is not a secret: an agent that can run it stops inventing its own
+    # check, which is where the 37 tool calls per agent went.
+    tests_path = board / '030--tests.py'
+    tests_path.write_text(spec['tests'], encoding='utf-8')
     prompts = []
     for agent in owners:
         start, end = spans[agent]
         current = draft[start:end]
         workspace = (root / agent / 'part').resolve()
+        workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / 'verify.py').write_text(
+            VERIFY_TOOL.format(draft=shown(draft_path), tests=shown(tests_path),
+                               block='block' + suffix, name=agent, out=out_name),
+            encoding='utf-8')
         task = ('You own exactly ONE block of the draft: part:%s. The draft is on the board at '
                 '%s - read it there first.\n'
                 'Rewrite ONLY the inside of your block. Everything else belongs to another agent '
                 'or is frozen structure: if you need a change there, post a note on the board '
                 'instead of making it.\n'
+                'HOW TO WORK, in about a dozen tool calls: read the draft once, write your block '
+                'to %s in your workspace, then run `python verify.py` there. It splices your '
+                'block into the draft and runs the very tests the harness will run at the end, so '
+                'you never have to invent your own check. Fix and re-verify until it passes.\n'
+                'Measured on the last run: 37 tool calls per agent cost 1.4M tokens, nearly all of '
+                'it re-reading context you already had.\n'
                 'code = the replacement content for the INSIDE of your block, without the markers '
                 'and without any other part of the file. The harness keeps only your block, so '
                 'returning the whole file wastes your turn.\n'
-                'Verify by splicing your block into a copy of the draft in your workspace and '
-                'rendering or running that copy.\n'
-                'Work in about a dozen tool calls: read the draft once, write your block, verify '
-                'once, post one note. Measured on the last run: 37 tool calls per agent cost 1.4M '
-                'tokens, almost all of it re-reading context you already had.\n'
                 'YOUR BLOCK RIGHT NOW (%d chars%s):\n%s\n'
-                % (agent, shown(draft_path), len(current),
+                % (agent, shown(draft_path), 'block' + suffix, len(current),
                    '' if len(current) <= 2000 else ', truncated here', current[:2000]))
         prompts.append(AgentRequest(agent, brief(agent, workspace, task), workspace,
                                     delay=STAGGER * len(prompts), shared=(board,), sandbox=box))
@@ -915,6 +972,16 @@ def run_swarm(run, spec, warm, box):
             path.write_text(fragment, encoding='utf-8')
             item['part_file'] = shown(path)
         item.pop('code', None)
+    # An agent that died after writing its block still did the work: verify.py had it put the
+    # block on disk, so take that rather than ship the prototype's placeholder for the slot.
+    for agent in owners:
+        left = root / agent / 'part' / ('block' + suffix)
+        if agent not in fragments and left.exists():
+            body = clean_fragment(left.read_text(encoding='utf-8', errors='replace'), agent)
+            if body:
+                fragments[agent] = body
+                (board / ('%s--part%s' % (agent, suffix))).write_text(body, encoding='utf-8')
+                trace(run, '', 'salvaged', agent, {'bytes': len(body), 'source': 'block file'})
     assembled = assemble(draft, fragments)
     assembled_path = board / ('020--assembled' + suffix)
     assembled_path.write_text(assembled, encoding='utf-8')
