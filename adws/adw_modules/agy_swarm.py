@@ -391,11 +391,11 @@ def main():
     print("  tool calls      :", b["tool_calls_this_round"], "this round")
     print("  tokens spent    : {:,}".format(spent))
     if not cap:
-        print("  cap             : none set")
+        print("  stage budget    : none set")
         return
     left = max(0, cap - spent)
     pct = 100.0 * left / cap
-    print("  cap             : {:,}".format(cap))
+    print("  stage budget    : {:,}".format(cap))
     print("  tokens left     : {:,}  ({:.0f}%)".format(left, pct))
     if pct < 25:
         print("  ADVICE          : low. Deliver your best complete answer now; do not")
@@ -834,9 +834,11 @@ def run_swarm(run, spec, warm, box):
         'Rules: one block per name, never nested, never overlapping, every block holding real '
         'content. Everything OUTSIDE the blocks is frozen - no other agent may touch it - so '
         'put the structure the contract demands there.\n'
-        'Give a block only to a name that owns a distinct region or concern. Names that are '
-        'reviewers by nature (a skeptic, a referee, a measurer) get no block; say so in '
-        'notes_for_next_agent. Use only these names:\n  %s\n'
+        'Give a block only to a name that owns a distinct region or concern, but cut the file '
+        'fine enough that at least two thirds of the names below get one: every name left '
+        'without a block becomes a reviewer, and a swarm of reviewers builds nothing. Names '
+        'that are reviewers by nature (a skeptic, a referee, a measurer) are the exception; '
+        'say which in notes_for_next_agent. Use only these names:\n  %s\n'
         'code = the COMPLETE file, markers in place.\n'
         % (out_name, opener % 'NAME', closer % 'NAME', ', '.join(roster)))
     proto, spans = None, {}
