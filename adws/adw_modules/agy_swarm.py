@@ -465,9 +465,10 @@ def board_protocol(board, agent, claim=True):
         'reasoning; they read your posts. Use your real tools on these exact paths:\n'
         '  1. BEFORE writing anything: list that directory and read EVERY .md file in it.\n'
         % board + step2 +
-        '  3. WHILE working, re-read the board at least twice. Post anything another agent\n'
-        '     needs - a measurement, a decision, a defect you found in their part - to\n'
-        '     %s/%s--note-N.md. Short posts, concrete numbers, no essays.\n'
+        '  3. WHILE working, re-read ONLY the posts added since your plan - the board is as\n'
+        '     wide as the swarm and re-reading all of it is most of your budget. Post what\n'
+        '     another agent needs - a measurement, a decision, a defect you found in their\n'
+        '     part - to %s/%s--note-N.md. Short posts, concrete numbers, no essays.\n'
         '  4. BEFORE you finish: re-read the whole board and reconcile with what others posted.\n'
         '     Say in your summary which posts you incorporated and which you rejected, and why.\n'
         '  5. BUDGET TOOL: run `python %s/budget.py` whenever you are about to start\n'
@@ -886,7 +887,11 @@ def run_swarm(run, spec, warm, box):
                 'and without any other part of the file. The harness keeps only your block, so '
                 'returning the whole file wastes your turn.\n'
                 'Verify by splicing your block into a copy of the draft in your workspace and '
-                'rendering or running that copy.\nYOUR BLOCK RIGHT NOW (%d chars%s):\n%s\n'
+                'rendering or running that copy.\n'
+                'Work in about a dozen tool calls: read the draft once, write your block, verify '
+                'once, post one note. Measured on the last run: 37 tool calls per agent cost 1.4M '
+                'tokens, almost all of it re-reading context you already had.\n'
+                'YOUR BLOCK RIGHT NOW (%d chars%s):\n%s\n'
                 % (agent, shown(draft_path), len(current),
                    '' if len(current) <= 2000 else ', truncated here', current[:2000]))
         prompts.append(AgentRequest(agent, brief(agent, workspace, task), workspace,
