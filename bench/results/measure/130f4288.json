@@ -1,0 +1,116 @@
+{
+ "run": "130f4288",
+ "shape": "parts",
+ "task": "Draw the chessboard position of the Italian Game after 1.e4 ",
+ "status": "success",
+ "tokens": 26334050,
+ "minutes": 34.8,
+ "startup": {
+  "kept_in_final": 0.49,
+  "tokens": 762882,
+  "share": 2.9,
+  "seconds": 198,
+  "agents": 1
+ },
+ "stages": {
+  "startup": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 762882,
+   "seconds": 198
+  },
+  "build": {
+   "agents": 15,
+   "ok": 14,
+   "tokens": 10387009,
+   "seconds": 624
+  },
+  "review": {
+   "agents": 20,
+   "ok": 19,
+   "tokens": 14269891,
+   "seconds": 1102
+  },
+  "finish": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 914268,
+   "seconds": 158
+  }
+ },
+ "division": {
+  "roster": 20,
+  "owners": [
+   "backdrop",
+   "frame",
+   "squares",
+   "files",
+   "ranks",
+   "pawns",
+   "rooks",
+   "knights",
+   "bishops",
+   "queens",
+   "kings",
+   "panel",
+   "caption",
+   "moves",
+   "tomove"
+  ],
+  "reviewers": [
+   "pieces",
+   "palette",
+   "measurer",
+   "skeptic",
+   "referee"
+  ],
+  "block_bytes": {
+   "backdrop": 61,
+   "frame": 114,
+   "squares": 5097,
+   "files": 1176,
+   "ranks": 1152,
+   "pawns": 5833,
+   "rooks": 1703,
+   "knights": 0,
+   "bishops": 1725,
+   "queens": 712,
+   "kings": 810,
+   "panel": 116,
+   "caption": 148,
+   "moves": 322,
+   "tomove": 149
+  },
+  "block_gini": 0.63,
+  "plan_similarity": {
+   "pairs": 171,
+   "mean": 0.164,
+   "worst": [
+    "kings",
+    "queens",
+    0.78125
+   ],
+   "focus": 0.46
+  }
+ },
+ "overlap": {
+  "compared": 78,
+  "worst_pair": [
+   "bishops",
+   "caption",
+   0.0
+  ],
+  "near_duplicates": [],
+  "duplicate_count": 0
+ },
+ "outcome": {
+  "accepted": true,
+  "tests_passed": 14,
+  "tests_ran": 14,
+  "shipped_candidate": "finished",
+  "candidates": {
+   "assembled": true,
+   "finished": true
+  }
+ }
+}

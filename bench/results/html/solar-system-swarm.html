@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Keplerian Orrery</title>
+  <!-- part:palette -->
+<style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #02040a;
+      color: #e0e6ed;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #orrery-canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+<!-- /part:palette -->
+</head>
+<body>
+  <canvas id="orrery-canvas"></canvas>
+
+  <script id="orbit-model" type="module">
+// part:kepler
+function solveKepler(M, e) {
+  let m = M % (2 * Math.PI);
+  if (m < 0) m += 2 * Math.PI;
+  let E = e < 0.6 ? m : (m + Math.sin(m) * e);
+  for (let i = 0; i < 10; i++) {
+    const f = E - e * Math.sin(E) - m;
+    const fPrime = 1 - e * Math.cos(E);
+    const delta = f / fPrime;
+    E -= delta;
+    if (Math.abs(delta) < 1e-12) break;
+  }
+  return E + (M - m);
+}
+// /part:kepler
+
+// part:ephemeris
+function computeOrbitPos(a, e, omega, M0, period, t) {
+  const n = (2 * Math.PI) / period;
+  let M = (n * t + M0) % (2 * Math.PI);
+  if (M < 0) M += 2 * Math.PI;
+  const E = solveKepler(M, e);
+  const xOrb = a * (Math.cos(E) - e);
+  const yOrb = a * Math.sqrt(1 - e * e) * Math.sin(E);
+  const cosW = Math.cos(omega);
+  const sinW = Math.sin(omega);
+  return {
+    x: xOrb * cosW - yOrb * sinW,
+    y: xOrb * sinW + yOrb * cosW
+  };
+}
+// /part:ephemeris
+
+// part:mercury
+const MERCURY_DEF = { a: 65, e: 0.18, omega: 0.5, M0: 0.2, period: 3.537, r: 4.0, color: '#b5a797' };
+// /part:mercury
+
+// part:venus
+const VENUS_DEF = { a: 100, e: 0.08, omega: 1.8, M0: 1.1, period: 6.750, r: 6.5, color: '#e8c382' };
+// /part:venus
+
+// part:earth
+const EARTH_DEF = { a: 145, e: 0.07, omega: 3.2, M0: 2.3, period: 11.786, r: 7.5, color: '#5dade2' };
+// /part:earth
+
+// part:mars
+const MARS_DEF = { a: 200, e: 0.12, omega: 4.5, M0: 0.7, period: 19.092, r: 5.5, color: '#e74c3c' };
+// /part:mars
+
+// part:jupiter
+const JUPITER_DEF = { a: 280, e: 0.09, omega: 0.9, M0: 4.1, period: 31.626, r: 16.0, color: '#eb984e' };
+// /part:jupiter
+
+// part:saturn
+const SATURN_DEF = { a: 380, e: 0.10, omega: 2.4, M0: 5.0, period: 50.000, r: 13.0, color: '#f5cba7' };
+// /part:saturn
+
+// part:luna
+const LUNA_DEF = { a: 16, e: 0.04, omega: 0.0, M0: 0.0, period: 1.800, r: 2.5, color: '#d5dbdb' };
+// /part:luna
+
+// part:halley
+const HALLEY_DEF = { a: 210, e: 0.76, omega: 1.2, M0: 0.0, period: 45.000, r: 3.0, color: '#aed6f1' };
+// /part:halley
+
+export function positions(t) {
+  const star = {
+    id: 'star',
+    kind: 'star',
+    x: 0,
+    y: 0,
+    r: 24,
+    color: '#ffdd66'
+  };
+
+  const pMerc = computeOrbitPos(MERCURY_DEF.a, MERCURY_DEF.e, MERCURY_DEF.omega, MERCURY_DEF.M0, MERCURY_DEF.period, t);
+  const mercury = {
+    id: 'mercury',
+    kind: 'planet',
+    parent: 'star',
+    x: pMerc.x,
+    y: pMerc.y,
+    r: MERCURY_DEF.r,
+    color: MERCURY_DEF.color,
+    a: MERCURY_DEF.a,
+    e: MERCURY_DEF.e,
+    omega: MERCURY_DEF.omega
+  };
+
+  const pVen = computeOrbitPos(VENUS_DEF.a, VENUS_DEF.e, VENUS_DEF.omega, VENUS_DEF.M0, VENUS_DEF.period, t);
+  const venus = {
+    id: 'venus',
+    kind: 'planet',
+    parent: 'star',
+    x: pVen.x,
+    y: pVen.y,
+    r: VENUS_DEF.r,
+    color: VENUS_DEF.color,
+    a: VENUS_DEF.a,
+    e: VENUS_DEF.e,
+    omega: VENUS_DEF.omega
+  };
+
+  const pEarth = computeOrbitPos(EARTH_DEF.a, EARTH_DEF.e, EARTH_DEF.omega, EARTH_DEF.M0, EARTH_DEF.period, t);
+  const earth = {
+    id: 'earth',
+    kind: 'planet',
+    parent: 'star',
+    x: pEarth.x,
+    y: pEarth.y,
+    r: EARTH_DEF.r,
+    color: EARTH_DEF.color,
+    a: EARTH_DEF.a,
+    e: EARTH_DEF.e,
+    omega: EARTH_DEF.omega
+  };
+
+  const pMars = computeOrbitPos(MARS_DEF.a, MARS_DEF.e, MARS_DEF.omega, MARS_DEF.M0, MARS_DEF.period, t);
+  const mars = {
+    id: 'mars',
+    kind: 'planet',
+    parent: 'star',
+    x: pMars.x,
+    y: pMars.y,
+    r: MARS_DEF.r,
+    color: MARS_DEF.color,
+    a: MARS_DEF.a,
+    e: MARS_DEF.e,
+    omega: MARS_DEF.omega
+  };
+
+  const pJup = computeOrbitPos(JUPITER_DEF.a, JUPITER_DEF.e, JUPITER_DEF.omega, JUPITER_DEF.M0, JUPITER_DEF.period, t);
+  const jupiter = {
+    id: 'jupiter',
+    kind: 'planet',
+    parent: 'star',
+    x: pJup.x,
+    y: pJup.y,
+    r: JUPITER_DEF.r,
+    color: JUPITER_DEF.color,
+    a: JUPITER_DEF.a,
+    e: JUPITER_DEF.e,
+    omega: JUPITER_DEF.omega
+  };
+
+  const pSat = computeOrbitPos(SATURN_DEF.a, SATURN_DEF.e, SATURN_DEF.omega, SATURN_DEF.M0, SATURN_DEF.period, t);
+  const saturn = {
+    id: 'saturn',
+    kind: 'planet',
+    parent: 'star',
+    x: pSat.x,
+    y: pSat.y,
+    r: SATURN_DEF.r,
+    color: SATURN_DEF.color,
+    a: SATURN_DEF.a,
+    e: SATURN_DEF.e,
+    omega: SATURN_DEF.omega,
+    hasRings: true
+  };
+
+  const pLunaRel = computeOrbitPos(LUNA_DEF.a, LUNA_DEF.e, LUNA_DEF.omega, LUNA_DEF.M0, LUNA_DEF.period, t);
+  const luna = {
+    id: 'luna',
+    kind: 'moon',
+    parent: 'earth',
+    x: earth.x + pLunaRel.x,
+    y: earth.y + pLunaRel.y,
+    r: LUNA_DEF.r,
+    color: LUNA_DEF.color
+  };
+
+  const pHal = computeOrbitPos(HALLEY_DEF.a, HALLEY_DEF.e, HALLEY_DEF.omega, HALLEY_DEF.M0, HALLEY_DEF.period, t);
+  const halley = {
+    id: 'halley',
+    kind: 'comet',
+    parent: 'star',
+    x: pHal.x,
+    y: pHal.y,
+    r: HALLEY_DEF.r,
+    color: HALLEY_DEF.color,
+    a: HALLEY_DEF.a,
+    e: HALLEY_DEF.e,
+    omega: HALLEY_DEF.omega
+  };
+
+  return [star, mercury, venus, earth, mars, jupiter, saturn, luna, halley];
+}
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.positions = positions;
+}
+  </script>
+
+  <script type="module">
+// part:canvas
+const canvasEl = document.getElementById('orrery-canvas');
+const ctx = canvasEl.getContext('2d');
+let viewScale = 1.0;
+let originX = 0;
+let originY = 0;
+let stars = [];
+
+const normStars = [];
+(function initNormalizedStarfield() {
+  let seed = 42;
+  function pseudoRandom() {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  }
+  const count = 500;
+  for (let i = 0; i < count; i++) {
+    normStars.push({
+      nx: pseudoRandom(),
+      ny: pseudoRandom(),
+      r: pseudoRandom() * 1.2 + 0.3,
+      alpha: pseudoRandom() * 0.7 + 0.2,
+      tint: pseudoRandom() > 0.8 ? '#aed6f1' : (pseudoRandom() > 0.6 ? '#f9e79f' : '#ffffff')
+    });
+  }
+})();
+
+function updateStarfield(w, h) {
+  stars = normStars.map(s => ({
+    x: s.nx * w,
+    y: s.ny * h,
+    r: s.r,
+    alpha: s.alpha,
+    tint: s.tint
+  }));
+}
+
+function handleResize() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  canvasEl.width = w * dpr;
+  canvasEl.height = h * dpr;
+  canvasEl.style.width = w + 'px';
+  canvasEl.style.height = h + 'px';
+  originX = (w * dpr) / 2;
+  originY = (h * dpr) / 2;
+  const minDim = Math.min(w, h) * dpr;
+  viewScale = minDim / 950;
+  updateStarfield(w * dpr, h * dpr);
+}
+
+window.addEventListener('resize', handleResize);
+handleResize();
+// /part:canvas
+
+// part:corona
+function drawStar(star, time) {
+  const glowRadius = star.r * 3.8;
+  const pulse = Math.sin(time * 2.5) * 1.5;
+  const coronaGrad = ctx.createRadialGradient(star.x, star.y, star.r * 0.6, star.x, star.y, glowRadius + pulse);
+  coronaGrad.addColorStop(0, 'rgba(255, 245, 200, 1.0)');
+  coronaGrad.addColorStop(0.2, 'rgba(255, 195, 50, 0.75)');
+  coronaGrad.addColorStop(0.55, 'rgba(255, 110, 15, 0.25)');
+  coronaGrad.addColorStop(1, 'rgba(255, 60, 0, 0)');
+
+  ctx.save();
+  ctx.fillStyle = coronaGrad;
+  ctx.beginPath();
+  ctx.arc(star.x, star.y, glowRadius + pulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.shadowColor = '#ffe066';
+  ctx.shadowBlur = 18;
+  ctx.beginPath();
+  ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+// /part:corona
+
+// part:orbits
+function drawOrbitGuide(body) {
+  if (!body.a || body.e === undefined || body.omega === undefined) return;
+  const a = body.a;
+  const e = body.e;
+  const b = a * Math.sqrt(1 - e * e);
+  const omega = body.omega;
+
+  const centerX = -a * e * Math.cos(omega);
+  const centerY = -a * e * Math.sin(omega);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(centerX, centerY, a, b, omega, 0, Math.PI * 2);
+  ctx.strokeStyle = body.kind === 'comet' ? 'rgba(120, 190, 255, 0.22)' : 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = body.kind === 'comet' ? 1.0 : 0.8;
+  if (body.kind === 'comet') {
+    ctx.setLineDash([4, 6]);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+// /part:orbits
+
+// part:discs
+function drawPlanet(p, star) {
+  const angleToStar = Math.atan2(star.y - p.y, star.x - p.x);
+  const cosA = Math.cos(angleToStar);
+  const sinA = Math.sin(angleToStar);
+
+  ctx.save();
+  ctx.translate(p.x, p.y);
+
+  // If the planet has a ring system (e.g. Saturn), draw the rear arc behind the body
+  if (p.hasRings) {
+    ctx.save();
+    ctx.rotate(0.38);
+
+    // Rear outer ring (Ring A)
+    ctx.beginPath();
+    ctx.ellipse(0, 0, p.r * 2.25, p.r * 0.72, 0, Math.PI, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(215, 195, 160, 0.40)';
+    ctx.lineWidth = p.r * 0.32;
+    ctx.stroke();
+
+    // Rear inner ring (Ring B)
+    ctx.beginPath();
+    ctx.ellipse(0, 0, p.r * 1.65, p.r * 0.52, 0, Math.PI, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(235, 215, 180, 0.60)';
+    ctx.lineWidth = p.r * 0.38;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Lit disc shaded directionally away from the central star
+  const litX = cosA * p.r;
+  const litY = sinA * p.r;
+  const darkX = -litX;
+  const darkY = -litY;
+
+  const grad = ctx.createLinearGradient(litX, litY, darkX, darkY);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.18, p.color);
+  grad.addColorStop(0.60, p.color);
+  grad.addColorStop(0.88, '#12161f');
+  grad.addColorStop(1, '#030508');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Subtle atmospheric limb glow on the starward edge for terrestrial/gas planets
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+  ctx.clip();
+
+  const rimGrad = ctx.createRadialGradient(litX * 0.8, litY * 0.8, p.r * 0.3, 0, 0, p.r * 1.05);
+  rimGrad.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+  rimGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.08)');
+  rimGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = rimGrad;
+  ctx.fill();
+  ctx.restore();
+
+  // If the planet has a ring system, draw the front arc in front of the body
+  if (p.hasRings) {
+    ctx.save();
+    ctx.rotate(0.38);
+
+    // Front inner ring (Ring B)
+    ctx.beginPath();
+    ctx.ellipse(0, 0, p.r * 1.65, p.r * 0.52, 0, 0, Math.PI);
+    ctx.strokeStyle = 'rgba(235, 215, 180, 0.60)';
+    ctx.lineWidth = p.r * 0.38;
+    ctx.stroke();
+
+    // Front outer ring (Ring A)
+    ctx.beginPath();
+    ctx.ellipse(0, 0, p.r * 2.25, p.r * 0.72, 0, 0, Math.PI);
+    ctx.strokeStyle = 'rgba(215, 195, 160, 0.40)';
+    ctx.lineWidth = p.r * 0.32;
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawMoon(m, star) {
+  const angleToStar = Math.atan2(star.y - m.y, star.x - m.x);
+  const cosA = Math.cos(angleToStar);
+  const sinA = Math.sin(angleToStar);
+
+  ctx.save();
+  ctx.translate(m.x, m.y);
+
+  // Directional shading away from the star for moon body
+  const litX = cosA * m.r;
+  const litY = sinA * m.r;
+  const darkX = -litX;
+  const darkY = -litY;
+
+  const grad = ctx.createLinearGradient(litX, litY, darkX, darkY);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.25, m.color);
+  grad.addColorStop(0.65, m.color);
+  grad.addColorStop(0.90, '#15171a');
+  grad.addColorStop(1, '#020305');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, m.r, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+// /part:discs
+
+// part:tail
+function drawComet(comet, star) {
+  const dx = comet.x - star.x;
+  const dy = comet.y - star.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const dirX = dx / dist;
+  const dirY = dy / dist;
+
+  const periDist = (comet.a && comet.e !== undefined) ? comet.a * (1 - comet.e) : 50.4;
+  const aphDist = (comet.a && comet.e !== undefined) ? comet.a * (1 + comet.e) : 369.6;
+  const normDist = Math.max(0, Math.min(1, (dist - periDist) / (aphDist - periDist)));
+  const proximity = 1 - normDist;
+
+  const tailLength = 16 + Math.pow(proximity, 1.4) * 120;
+  const tailSpread = 3.5 + Math.pow(proximity, 1.2) * 18;
+
+  const tailEndX = comet.x + dirX * tailLength;
+  const tailEndY = comet.y + dirY * tailLength;
+  const perpX = -dirY;
+  const perpY = dirX;
+
+  const p1X = tailEndX + perpX * tailSpread;
+  const p1Y = tailEndY + perpY * tailSpread;
+  const p2X = tailEndX - perpX * tailSpread;
+  const p2Y = tailEndY - perpY * tailSpread;
+
+  ctx.save();
+
+  // Diffuse outer dust tail
+  const alpha = 0.22 + proximity * 0.65;
+  const tailGrad = ctx.createLinearGradient(comet.x, comet.y, tailEndX, tailEndY);
+  tailGrad.addColorStop(0, `rgba(200, 235, 255, ${alpha})`);
+  tailGrad.addColorStop(0.3, `rgba(130, 195, 255, ${alpha * 0.55})`);
+  tailGrad.addColorStop(0.7, `rgba(80, 150, 240, ${alpha * 0.2})`);
+  tailGrad.addColorStop(1, 'rgba(50, 100, 220, 0)');
+
+  ctx.fillStyle = tailGrad;
+  ctx.beginPath();
+  ctx.moveTo(comet.x, comet.y);
+  ctx.lineTo(p1X, p1Y);
+  ctx.lineTo(p2X, p2Y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Ion tail narrow central spine
+  const spineSpread = tailSpread * 0.35;
+  const s1X = tailEndX + perpX * spineSpread;
+  const s1Y = tailEndY + perpY * spineSpread;
+  const s2X = tailEndX - perpX * spineSpread;
+  const s2Y = tailEndY - perpY * spineSpread;
+
+  const spineGrad = ctx.createLinearGradient(comet.x, comet.y, tailEndX, tailEndY);
+  spineGrad.addColorStop(0, `rgba(240, 250, 255, ${alpha * 0.9})`);
+  spineGrad.addColorStop(0.25, `rgba(160, 220, 255, ${alpha * 0.65})`);
+  spineGrad.addColorStop(1, 'rgba(100, 180, 255, 0)');
+
+  ctx.fillStyle = spineGrad;
+  ctx.beginPath();
+  ctx.moveTo(comet.x, comet.y);
+  ctx.lineTo(s1X, s1Y);
+  ctx.lineTo(s2X, s2Y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Spherical glowing coma
+  const comaR = Math.max(comet.r * 2.8, 8);
+  const comaGrad = ctx.createRadialGradient(comet.x, comet.y, 0, comet.x, comet.y, comaR);
+  comaGrad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+  comaGrad.addColorStop(0.3, 'rgba(180, 230, 255, 0.85)');
+  comaGrad.addColorStop(0.7, 'rgba(120, 190, 255, 0.35)');
+  comaGrad.addColorStop(1, 'rgba(80, 160, 255, 0)');
+
+  ctx.fillStyle = comaGrad;
+  ctx.beginPath();
+  ctx.arc(comet.x, comet.y, comaR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Bright starlike nucleus
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(comet.x, comet.y, comet.r * 0.75, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+// /part:tail
+
+// part:raf
+let startTime = null;
+
+function renderFrame(timestamp) {
+  requestAnimationFrame(renderFrame);
+
+  if (typeof globalThis.positions !== 'function') return;
+
+  if (startTime === null) {
+    startTime = timestamp;
+  }
+  const elapsed = (timestamp - startTime) * 0.001;
+  const bodies = globalThis.positions(elapsed);
+
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#02040a';
+  ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+
+  for (let i = 0; i < stars.length; i++) {
+    const s = stars[i];
+    ctx.fillStyle = s.tint;
+    ctx.globalAlpha = s.alpha;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1.0;
+
+  ctx.translate(originX, originY);
+  ctx.scale(viewScale, viewScale);
+
+  const starBody = bodies.find(b => b.kind === 'star') || { x: 0, y: 0, r: 24 };
+
+  for (let i = 0; i < bodies.length; i++) {
+    drawOrbitGuide(bodies[i]);
+  }
+
+  for (let i = 0; i < bodies.length; i++) {
+    const b = bodies[i];
+    if (b.kind === 'comet') {
+      drawComet(b, starBody);
+    }
+  }
+
+  for (let i = 0; i < bodies.length; i++) {
+    const b = bodies[i];
+    if (b.kind === 'planet') {
+      drawPlanet(b, starBody);
+    } else if (b.kind === 'moon') {
+      drawMoon(b, starBody);
+    }
+  }
+
+  drawStar(starBody, elapsed);
+
+  ctx.restore();
+}
+
+requestAnimationFrame(renderFrame);
+// /part:raf
+  </script>
+</body>
+</html>

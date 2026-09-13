@@ -1,0 +1,118 @@
+{
+ "run": "fe20a125",
+ "shape": "parts",
+ "task": "Build an animated top-down orrery as a single self-contained",
+ "status": "success",
+ "tokens": 28387157,
+ "minutes": 39.4,
+ "startup": {
+  "kept_in_final": 0.74,
+  "tokens": 1646574,
+  "share": 5.8,
+  "seconds": 334,
+  "agents": 1
+ },
+ "stages": {
+  "startup": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 1646574,
+   "seconds": 334
+  },
+  "build": {
+   "agents": 17,
+   "ok": 17,
+   "tokens": 13784582,
+   "seconds": 819
+  },
+  "review": {
+   "agents": 20,
+   "ok": 13,
+   "tokens": 11899396,
+   "seconds": 958
+  },
+  "finish": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 1056605,
+   "seconds": 244
+  }
+ },
+ "division": {
+  "roster": 20,
+  "owners": [
+   "mercury",
+   "venus",
+   "earth",
+   "mars",
+   "jupiter",
+   "saturn",
+   "luna",
+   "halley",
+   "kepler",
+   "ephemeris",
+   "canvas",
+   "raf",
+   "orbits",
+   "corona",
+   "discs",
+   "tail",
+   "palette"
+  ],
+  "reviewers": [
+   "measurer",
+   "skeptic",
+   "referee"
+  ],
+  "block_bytes": {
+   "mercury": 101,
+   "venus": 100,
+   "earth": 101,
+   "mars": 100,
+   "jupiter": 104,
+   "saturn": 103,
+   "luna": 98,
+   "halley": 102,
+   "kepler": 361,
+   "ephemeris": 434,
+   "canvas": 1175,
+   "raf": 1355,
+   "orbits": 652,
+   "corona": 783,
+   "discs": 3176,
+   "tail": 2762,
+   "palette": 414
+  },
+  "block_gini": 0.61,
+  "plan_similarity": {
+   "pairs": 171,
+   "mean": 0.164,
+   "worst": [
+    "jupiter",
+    "saturn",
+    0.6428571428571429
+   ],
+   "focus": 0.44
+  }
+ },
+ "overlap": {
+  "compared": 28,
+  "worst_pair": [
+   "canvas",
+   "corona",
+   0.0
+  ],
+  "near_duplicates": [],
+  "duplicate_count": 0
+ },
+ "outcome": {
+  "accepted": true,
+  "tests_passed": 14,
+  "tests_ran": 14,
+  "shipped_candidate": "finished",
+  "candidates": {
+   "assembled": true,
+   "finished": true
+  }
+ }
+}

@@ -1,0 +1,118 @@
+{
+ "run": "e202273f",
+ "shape": "parts",
+ "task": "Draw a pelican riding a bicycle along a beach, as a single s",
+ "status": "fail",
+ "tokens": 34625727,
+ "minutes": 39.5,
+ "startup": {
+  "kept_in_final": 0.07,
+  "tokens": 1550099,
+  "share": 4.5,
+  "seconds": 178,
+  "agents": 1
+ },
+ "stages": {
+  "startup": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 1550099,
+   "seconds": 178
+  },
+  "build": {
+   "agents": 17,
+   "ok": 15,
+   "tokens": 30097550,
+   "seconds": 1136
+  },
+  "review": {
+   "agents": 20,
+   "ok": 0,
+   "tokens": 0,
+   "seconds": 552
+  },
+  "finish": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 2978078,
+   "seconds": 477
+  }
+ },
+ "division": {
+  "roster": 20,
+  "owners": [
+   "composition",
+   "horizon",
+   "sky",
+   "sea",
+   "sand",
+   "wheels",
+   "frame",
+   "drivetrain",
+   "handlebars",
+   "saddle",
+   "anatomy",
+   "bill",
+   "pouch",
+   "plumage",
+   "feet",
+   "palette",
+   "shading"
+  ],
+  "reviewers": [
+   "measurer",
+   "skeptic",
+   "referee"
+  ],
+  "block_bytes": {
+   "composition": 2881,
+   "horizon": 1458,
+   "sky": 2852,
+   "sea": 5330,
+   "sand": 5581,
+   "wheels": 15294,
+   "frame": 9053,
+   "drivetrain": 0,
+   "handlebars": 4573,
+   "saddle": 3524,
+   "anatomy": 0,
+   "bill": 1135,
+   "pouch": 1896,
+   "plumage": 3864,
+   "feet": 7739,
+   "palette": 3087,
+   "shading": 2227
+  },
+  "block_gini": 0.45,
+  "plan_similarity": {
+   "pairs": 136,
+   "mean": 0.12,
+   "worst": [
+    "composition",
+    "sky",
+    0.2459016393442623
+   ],
+   "focus": 0.34
+  }
+ },
+ "overlap": {
+  "compared": 45,
+  "worst_pair": [
+   "bill",
+   "composition",
+   0.0
+  ],
+  "near_duplicates": [],
+  "duplicate_count": 0
+ },
+ "outcome": {
+  "accepted": true,
+  "tests_passed": 11,
+  "tests_ran": 11,
+  "shipped_candidate": "finished",
+  "candidates": {
+   "assembled": true,
+   "finished": true
+  }
+ }
+}

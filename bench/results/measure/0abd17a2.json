@@ -1,0 +1,89 @@
+{
+ "run": "0abd17a2",
+ "shape": "whole-file",
+ "task": "Recreate, from scratch, the hero animation on OpenAI's GPT-6",
+ "status": "fail",
+ "tokens": 35532096,
+ "minutes": 44.7,
+ "startup": {
+  "kept_in_final": null,
+  "tokens": 32928869,
+  "share": 92.7,
+  "seconds": 2448,
+  "agents": 20
+ },
+ "stages": {
+  "build": {
+   "agents": 20,
+   "ok": 15,
+   "tokens": 32928869,
+   "seconds": 2448
+  },
+  "finish": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 2603227,
+   "seconds": 229
+  }
+ },
+ "division": {
+  "roster": null,
+  "owners": [],
+  "reviewers": [],
+  "block_bytes": {},
+  "block_gini": null,
+  "plan_similarity": {
+   "pairs": 153,
+   "mean": 0.294,
+   "worst": [
+    "differential",
+    "spikes",
+    0.4648648648648649
+   ],
+   "focus": 0.24
+  }
+ },
+ "overlap": {
+  "compared": 91,
+  "worst_pair": [
+   "composition",
+   "rotation",
+   0.75
+  ],
+  "near_duplicates": [
+   [
+    "arms",
+    "colorist",
+    0.55
+   ],
+   [
+    "arms",
+    "composition",
+    0.55
+   ],
+   [
+    "arms",
+    "measurer",
+    0.5
+   ],
+   [
+    "arms",
+    "referee",
+    0.64
+   ],
+   [
+    "arms",
+    "resize",
+    0.5
+   ]
+  ],
+  "duplicate_count": 28
+ },
+ "outcome": {
+  "accepted": true,
+  "tests_passed": 11,
+  "tests_ran": 11,
+  "shipped_candidate": null,
+  "candidates": null
+ }
+}

@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPT-6 Astra</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: radial-gradient(circle at center, #070b14 0%, #030408 70%, #010204 100%);
+      color: #f0f4fc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .hero-container {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(1rem, 3vw, 2.5rem);
+      user-select: none;
+      z-index: 2;
+      width: 100%;
+      max-width: 1200px;
+      padding: 0 1rem;
+    }
+
+    .hero-text {
+      font-size: clamp(2.4rem, 6vw, 4.8rem);
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #eaf1fb;
+      text-shadow: 0 0 24px rgba(180, 215, 255, 0.45), 0 0 60px rgba(120, 170, 255, 0.2);
+    }
+
+    .canvas-wrapper {
+      position: relative;
+      width: clamp(280px, 42vw, 480px);
+      height: clamp(280px, 42vw, 480px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero-container">
+    <span class="hero-text gpt">GPT</span>
+    <div class="canvas-wrapper">
+      <canvas id="galaxy-canvas"></canvas>
+    </div>
+    <span class="hero-text astra">Astra</span>
+  </div>
+
+  <!-- Pure Mathematical Model: ZERO references to DOM/canvas primitives -->
+  <script id="galaxy-model" type="module">
+    const TOTAL_PARTICLES = 1500;
+
+    function createRng(seed) {
+      let s = seed >>> 0;
+      return function() {
+        s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+        return s / 4294967296;
+      };
+    }
+
+    const rng = createRng(42);
+
+    function calcOmega(r) {
+      return 0.020 + 0.022 / (1.0 + Math.pow(r / 48.0, 1.25));
+    }
+
+    const SPECTRA = [
+      { r: 200, g: 230, b: 255 },
+      { r: 160, g: 210, b: 255 },
+      { r: 120, g: 180, b: 255 },
+      { r: 255, g: 255, b: 255 },
+      { r: 245, g: 250, b: 255 },
+      { r: 255, g: 200, b: 130 },
+      { r: 255, g: 170, b: 90 },
+      { r: 255, g: 220, b: 170 }
+    ];
+
+    const particleRoster = [];
+
+    // 1. Ascender arm tracing the numeral 6 (500 particles)
+    for (let i = 0; i < 500; i++) {
+      const frac = i / 500.0;
+      const baseR = 50.0 + Math.pow(frac, 1.1) * 190.0;
+      const baseTheta = 1.35 - 1.55 * Math.log(baseR / 35.0) + (rng() - 0.5) * 0.22;
+      const r0 = baseR + (rng() - 0.5) * 12.0;
+      const size = 0.6 + rng() * 1.6;
+      const w = calcOmega(r0);
+      const roll = rng();
+      let color;
+      if (roll < 0.65) {
+        color = SPECTRA[Math.floor(rng() * 3)];
+      } else if (roll < 0.85) {
+        color = SPECTRA[3 + Math.floor(rng() * 2)];
+      } else {
+        color = SPECTRA[5 + Math.floor(rng() * 3)];
+      }
+      const spike = (i % 65 === 0);
+      particleRoster.push({ r0, th0: baseTheta, r: size, w, color, spike, alpha: 0.4 + rng() * 0.5 });
+    }
+
+    // 2. Bowl and inner loop of numeral 6 (450 particles)
+    for (let i = 0; i < 450; i++) {
+      const frac = i / 450.0;
+      const baseR = 25.0 + Math.pow(frac, 1.2) * 110.0;
+      const baseTheta = 1.35 + 1.45 * Math.log(baseR / 20.0) + (rng() - 0.5) * 0.25;
+      const r0 = baseR + (rng() - 0.5) * 10.0;
+      const size = 0.7 + rng() * 1.8;
+      const w = calcOmega(r0);
+      const roll = rng();
+      let color;
+      if (roll < 0.60) {
+        color = SPECTRA[Math.floor(rng() * 3)];
+      } else if (roll < 0.85) {
+        color = SPECTRA[3 + Math.floor(rng() * 2)];
+      } else {
+        color = SPECTRA[5 + Math.floor(rng() * 3)];
+      }
+      const spike = (i % 60 === 0);
+      particleRoster.push({ r0, th0: baseTheta, r: size, w, color, spike, alpha: 0.5 + rng() * 0.5 });
+    }
+
+    // 3. Dense nuclear core cluster (550 particles)
+    for (let i = 0; i < 550; i++) {
+      const frac = i / 550.0;
+      const baseR = 2.0 + Math.pow(frac, 2.2) * 55.0;
+      const baseTheta = 1.35 + 1.20 * Math.log(Math.max(baseR, 4.0) / 4.0) + (rng() - 0.5) * 0.35;
+      const r0 = Math.max(1.5, baseR + (rng() - 0.5) * 4.0);
+      const size = 0.8 + rng() * 2.2;
+      const w = calcOmega(r0);
+      const roll = rng();
+      let color;
+      if (roll < 0.40) {
+        color = SPECTRA[3 + Math.floor(rng() * 2)];
+      } else if (roll < 0.80) {
+        color = SPECTRA[Math.floor(rng() * 3)];
+      } else {
+        color = SPECTRA[5 + Math.floor(rng() * 3)];
+      }
+      const spike = (i % 55 === 0);
+      particleRoster.push({ r0, th0: baseTheta, r: size, w, color, spike, alpha: 0.6 + rng() * 0.4 });
+    }
+
+    export function points(t) {
+      const total = particleRoster.length;
+      const result = new Array(total);
+      for (let i = 0; i < total; i++) {
+        const item = particleRoster[i];
+        const angle = item.th0 + item.w * t;
+        result[i] = {
+          x: item.r0 * Math.cos(angle),
+          y: item.r0 * Math.sin(angle),
+          r: item.r,
+          color: item.color,
+          alpha: item.alpha,
+          spike: item.spike
+        };
+      }
+      return result;
+    }
+
+    if (typeof globalThis !== 'undefined') {
+      globalThis.__galaxy_points = points;
+    }
+  </script>
+
+  <!-- Separate Canvas Rendering Engine -->
+  <script type="module">
+    let getPoints = (typeof globalThis !== 'undefined' && globalThis.__galaxy_points)
+      ? globalThis.__galaxy_points
+      : null;
+
+    if (!getPoints) {
+      try {
+        const modelTag = document.getElementById('galaxy-model');
+        if (modelTag) {
+          const blob = new Blob([modelTag.textContent], { type: 'application/javascript' });
+          const blobUrl = URL.createObjectURL(blob);
+          const mod = await import(blobUrl);
+          getPoints = mod.points;
+          URL.revokeObjectURL(blobUrl);
+        }
+      } catch (err) {
+        console.error('Failed to import galaxy model:', err);
+      }
+    }
+
+    const canvas = document.getElementById('galaxy-canvas');
+    const ctx = canvas.getContext('2d');
+    let width = 0;
+    let height = 0;
+    let dpr = 1;
+    let startTime = null;
+
+    function resize() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      dpr = window.devicePixelRatio || 1;
+      width = rect.width;
+      height = rect.height;
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+
+    function drawBloom(cx, cy, scale) {
+      // 1. Broad outer cosmic halo (soft cobalt blue)
+      const outerR = 175 * scale;
+      const gOuter = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerR);
+      gOuter.addColorStop(0, 'rgba(80, 150, 255, 0.22)');
+      gOuter.addColorStop(0.35, 'rgba(50, 110, 220, 0.12)');
+      gOuter.addColorStop(0.7, 'rgba(30, 70, 160, 0.04)');
+      gOuter.addColorStop(1, 'rgba(10, 20, 60, 0)');
+      ctx.fillStyle = gOuter;
+      ctx.beginPath();
+      ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Mid-tier stellar nursery warmth (champagne amber)
+      const midR = 75 * scale;
+      const gMid = ctx.createRadialGradient(cx, cy, 0, cx, cy, midR);
+      gMid.addColorStop(0, 'rgba(255, 215, 150, 0.28)');
+      gMid.addColorStop(0.4, 'rgba(255, 180, 100, 0.14)');
+      gMid.addColorStop(1, 'rgba(200, 120, 40, 0)');
+      ctx.fillStyle = gMid;
+      ctx.beginPath();
+      ctx.arc(cx, cy, midR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 3. High-luminosity nuclear core
+      const coreR = 26 * scale;
+      const gCore = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+      gCore.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+      gCore.addColorStop(0.3, 'rgba(210, 235, 255, 0.80)');
+      gCore.addColorStop(0.7, 'rgba(120, 180, 255, 0.35)');
+      gCore.addColorStop(1, 'rgba(60, 120, 255, 0)');
+      ctx.fillStyle = gCore;
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawSpike(x, y, len, thickness, color, alpha) {
+      // 4-point Fraunhofer diffraction spikes
+      const r = color.r;
+      const g = color.g;
+      const b = color.b;
+
+      // Horizontal primary flare
+      const hGrad = ctx.createLinearGradient(x - len, y, x + len, y);
+      hGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
+      hGrad.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.95})`);
+      hGrad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      ctx.fillStyle = hGrad;
+      ctx.fillRect(x - len, y - thickness * 0.5, len * 2, thickness);
+
+      // Vertical primary flare
+      const vGrad = ctx.createLinearGradient(x, y - len, x, y + len);
+      vGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
+      vGrad.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.95})`);
+      vGrad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      ctx.fillStyle = vGrad;
+      ctx.fillRect(x - thickness * 0.5, y - len, thickness, len * 2);
+
+      // Soft diagonal glints
+      const diagLen = len * 0.38;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.PI / 4);
+      const dGrad = ctx.createLinearGradient(-diagLen, 0, diagLen, 0);
+      dGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
+      dGrad.addColorStop(0.5, `rgba(255, 255, 255, ${alpha * 0.5})`);
+      dGrad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+      ctx.fillStyle = dGrad;
+      ctx.fillRect(-diagLen, -thickness * 0.3, diagLen * 2, thickness * 0.6);
+      ctx.fillRect(-thickness * 0.3, -diagLen, thickness * 0.6, diagLen * 2);
+      ctx.restore();
+    }
+
+    function render(timestamp) {
+      if (!startTime) startTime = timestamp;
+      const elapsed = (timestamp - startTime) * 0.001;
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      // Near-black background clear
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#04060a';
+      ctx.fillRect(0, 0, width, height);
+
+      // Center coordinates
+      const cx = width * 0.5;
+      const cy = height * 0.5;
+      const scale = Math.min(width, height) / 520.0;
+
+      // Additive / lighter blending for luminous optical glow
+      ctx.globalCompositeOperation = 'lighter';
+
+      // Draw multi-tier bloomed core
+      drawBloom(cx, cy, scale);
+
+      if (getPoints) {
+        const stars = getPoints(elapsed);
+        const starCount = stars.length;
+
+        for (let i = 0; i < starCount; i++) {
+          const star = stars[i];
+          const px = cx + star.x * scale;
+          const py = cy + star.y * scale;
+          const pr = Math.max(0.5, star.r * scale);
+          const col = star.color;
+          const baseAlpha = star.alpha;
+
+          // 1. Soft star halo glow
+          const haloR = pr * 2.4;
+          const gHalo = ctx.createRadialGradient(px, py, 0, px, py, haloR);
+          gHalo.addColorStop(0, `rgba(${col.r}, ${col.g}, ${col.b}, ${baseAlpha * 0.45})`);
+          gHalo.addColorStop(1, `rgba(${col.r}, ${col.g}, ${col.b}, 0)`);
+          ctx.fillStyle = gHalo;
+          ctx.beginPath();
+          ctx.arc(px, py, haloR, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 2. High-brightness stellar point
+          ctx.fillStyle = `rgba(${col.r}, ${col.g}, ${col.b}, ${baseAlpha})`;
+          ctx.beginPath();
+          ctx.arc(px, py, pr * 0.8, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 3. 4-point Fraunhofer diffraction spikes on prominent stars
+          if (star.spike) {
+            const spikeLen = (16 + star.r * 10) * scale;
+            const spikeThickness = Math.max(1, 1.4 * scale);
+            drawSpike(px, py, spikeLen, spikeThickness, col, baseAlpha);
+          }
+        }
+      }
+
+      ctx.restore();
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>

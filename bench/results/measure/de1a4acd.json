@@ -1,0 +1,118 @@
+{
+ "run": "de1a4acd",
+ "shape": "parts",
+ "task": "Draw a city at dusk seen across a river, as a single self-co",
+ "status": "success",
+ "tokens": 20425613,
+ "minutes": 35.9,
+ "startup": {
+  "kept_in_final": 0.13,
+  "tokens": 2112806,
+  "share": 10.3,
+  "seconds": 312,
+  "agents": 1
+ },
+ "stages": {
+  "startup": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 2112806,
+   "seconds": 312
+  },
+  "build": {
+   "agents": 17,
+   "ok": 15,
+   "tokens": 14080945,
+   "seconds": 893
+  },
+  "review": {
+   "agents": 20,
+   "ok": 20,
+   "tokens": 3549666,
+   "seconds": 777
+  },
+  "finish": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 682196,
+   "seconds": 163
+  }
+ },
+ "division": {
+  "roster": 20,
+  "owners": [
+   "defs",
+   "sky",
+   "sun",
+   "clouds",
+   "hills",
+   "skyline",
+   "antennae",
+   "blocks",
+   "windows",
+   "rooftops",
+   "river",
+   "waterline",
+   "reflections",
+   "blocks-reflection",
+   "sunpath",
+   "birds",
+   "palette"
+  ],
+  "reviewers": [
+   "measurer",
+   "skeptic",
+   "referee"
+  ],
+  "block_bytes": {
+   "defs": 81,
+   "sky": 55,
+   "sun": 191,
+   "clouds": 1425,
+   "hills": 143,
+   "skyline": 378,
+   "antennae": 1429,
+   "blocks": 281,
+   "windows": 6793,
+   "rooftops": 2111,
+   "river": 784,
+   "waterline": 0,
+   "reflections": 5506,
+   "blocks-reflection": 296,
+   "sunpath": 1304,
+   "birds": 1101,
+   "palette": 647
+  },
+  "block_gini": 0.63,
+  "plan_similarity": {
+   "pairs": 153,
+   "mean": 0.132,
+   "worst": [
+    "hills",
+    "skyline",
+    0.39823008849557523
+   ],
+   "focus": 0.33
+  }
+ },
+ "overlap": {
+  "compared": 21,
+  "worst_pair": [
+   "blocks",
+   "blocks-reflection",
+   0.0
+  ],
+  "near_duplicates": [],
+  "duplicate_count": 0
+ },
+ "outcome": {
+  "accepted": true,
+  "tests_passed": 14,
+  "tests_ran": 14,
+  "shipped_candidate": "finished",
+  "candidates": {
+   "assembled": true,
+   "finished": true
+  }
+ }
+}

@@ -1,0 +1,367 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <defs>
+<!-- part:palette -->
+<linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f142e"/>
+      <stop offset="30%" stop-color="#26234d"/>
+      <stop offset="55%" stop-color="#56315c"/>
+      <stop offset="75%" stop-color="#a34856"/>
+      <stop offset="90%" stop-color="#db6c4e"/>
+      <stop offset="100%" stop-color="#fba85f"/>
+    </linearGradient>
+    <linearGradient id="river-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#241e35"/>
+      <stop offset="35%" stop-color="#161a2e"/>
+      <stop offset="70%" stop-color="#0e1220"/>
+      <stop offset="100%" stop-color="#080b14"/>
+    </linearGradient>
+<!-- /part:palette -->
+<!-- part:defs -->
+<filter id="river-blur">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+<!-- /part:defs -->
+  </defs>
+
+  <g id="sky">
+<!-- part:sky -->
+<rect width="1200" height="500" fill="url(#sky-grad)"/>
+<!-- /part:sky -->
+<!-- part:clouds -->
+<!-- High dusk cirrus / upper wisps -->
+    <ellipse cx="220" cy="95" rx="120" ry="8" fill="#322549" opacity="0.3"/>
+    <ellipse cx="980" cy="85" rx="140" ry="9" fill="#2d2244" opacity="0.3"/>
+    <ellipse cx="500" cy="115" rx="90" ry="7" fill="#3c2a52" opacity="0.25"/>
+
+    <!-- Mid stratus bands with rich evening mauve and plum tones -->
+    <ellipse cx="290" cy="145" rx="170" ry="13" fill="#4a3057" opacity="0.4"/>
+    <ellipse cx="340" cy="152" rx="110" ry="10" fill="#5e3864" opacity="0.35"/>
+    <ellipse cx="860" cy="135" rx="190" ry="14" fill="#442f56" opacity="0.4"/>
+    <ellipse cx="800" cy="142" rx="130" ry="10" fill="#583562" opacity="0.35"/>
+
+    <!-- Lower sunset cloud layers catching warm copper and rose glow -->
+    <ellipse cx="180" cy="185" rx="130" ry="10" fill="#6f3b64" opacity="0.35"/>
+    <ellipse cx="230" cy="190" rx="90" ry="7" fill="#8f4664" opacity="0.3"/>
+    <ellipse cx="710" cy="175" rx="150" ry="11" fill="#683760" opacity="0.38"/>
+    <ellipse cx="660" cy="182" rx="100" ry="8" fill="#864263" opacity="0.32"/>
+    <ellipse cx="1020" cy="170" rx="110" ry="9" fill="#5a335d" opacity="0.35"/>
+
+    <!-- Soft horizontal warm wisps near the horizon -->
+    <ellipse cx="420" cy="210" rx="120" ry="7" fill="#aa4d5e" opacity="0.28"/>
+    <ellipse cx="780" cy="205" rx="130" ry="8" fill="#b1535b" opacity="0.26"/>
+    <ellipse cx="570" cy="220" rx="80" ry="5" fill="#cf6a59" opacity="0.22"/>
+<!-- /part:clouds -->
+  </g>
+
+<!-- part:sunpath -->
+<polygon points="570,240 630,240 660,500 540,500" fill="#f89a4b" opacity="0.04"/>
+  <polygon points="585,240 615,240 635,500 565,500" fill="#fca35d" opacity="0.08"/>
+  <polygon points="593,240 607,240 615,500 585,500" fill="#ffbe6b" opacity="0.14"/>
+  <line x1="600" y1="160" x2="600" y2="240" stroke="#ffe085" stroke-width="2" opacity="0.16"/>
+  <line x1="600" y1="210" x2="600" y2="500" stroke="#ffb368" stroke-width="4" opacity="0.22"/>
+  <line x1="600" y1="180" x2="600" y2="500" stroke="#ffe085" stroke-width="1.5" opacity="0.25"/>
+  <line x1="597" y1="240" x2="597" y2="480" stroke="#fca35d" stroke-width="1" opacity="0.16"/>
+  <line x1="603" y1="240" x2="603" y2="480" stroke="#fca35d" stroke-width="1" opacity="0.16"/>
+  <line x1="600" y1="240" x2="480" y2="500" stroke="#fca35d" stroke-width="1" opacity="0.04"/>
+  <line x1="600" y1="240" x2="520" y2="500" stroke="#fca35d" stroke-width="1.5" opacity="0.06"/>
+  <line x1="600" y1="240" x2="560" y2="500" stroke="#ffbe6b" stroke-width="1.5" opacity="0.08"/>
+  <line x1="600" y1="240" x2="640" y2="500" stroke="#ffbe6b" stroke-width="1.5" opacity="0.08"/>
+  <line x1="600" y1="240" x2="680" y2="500" stroke="#fca35d" stroke-width="1.5" opacity="0.06"/>
+  <line x1="600" y1="240" x2="720" y2="500" stroke="#fca35d" stroke-width="1" opacity="0.04"/>
+<!-- /part:sunpath -->
+
+<!-- part:sun -->
+<circle cx="600" cy="240" r="48" fill="#ffa452" opacity="0.25"/>
+  <circle cx="600" cy="240" r="40" fill="#ffb368" opacity="0.4"/>
+  <circle id="sun" cx="600" cy="240" r="32" fill="#ffe085"/>
+<!-- /part:sun -->
+
+  <g id="birds">
+<!-- part:birds -->
+<polyline points="280,113 290,106 300,112 310,106 320,113" fill="none" stroke="#221e35" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="329,97 337,91 345,96 353,91 361,97" fill="none" stroke="#221e35" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="368,86 374,81 380,85 386,81 392,86" fill="none" stroke="#221e35" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="241,126 248,120 255,125 262,120 269,126" fill="none" stroke="#221e35" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="847,127 856,120 865,126 874,120 883,127" fill="none" stroke="#221e35" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="893,113 901,107 908,112 915,107 923,113" fill="none" stroke="#221e35" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="934,103 940,98 945,102 950,98 956,103" fill="none" stroke="#221e35" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+<!-- /part:birds -->
+  </g>
+
+  <g id="hills">
+<!-- part:hills -->
+<polygon id="hills-silhouette" points="0,420 0,330 150,300 320,320 480,285 600,310 750,280 920,305 1080,290 1200,315 1200,420" fill="#555866"/>
+<!-- /part:hills -->
+  </g>
+
+  <g id="skyline">
+<!-- part:skyline -->
+<polygon id="skyline-silhouette" points="0,460 0,380 70,380 70,330 110,330 110,350 170,350 170,310 210,310 210,390 280,390 280,290 320,290 320,360 410,360 410,250 460,250 460,370 540,370 540,300 580,300 580,380 660,380 660,270 700,270 700,360 780,360 780,310 830,310 830,370 910,370 910,260 950,260 950,380 1020,380 1020,320 1070,320 1070,390 1200,390 1200,460" fill="#3a4b6e"/>
+<!-- /part:skyline -->
+<!-- part:antennae -->
+<!-- Primary broadcast mast on central skyline tower (x=435, roof y=250) -->
+    <line x1="435" y1="250" x2="435" y2="235" stroke="#3a4b6e" stroke-width="2"/>
+    <line x1="435" y1="235" x2="435" y2="228" stroke="#3a4b6e" stroke-width="1.2"/>
+    <line x1="432" y1="239" x2="438" y2="239" stroke="#3a4b6e" stroke-width="1.2"/>
+    <line x1="433" y1="243" x2="437" y2="243" stroke="#3a4b6e" stroke-width="1.2"/>
+    <circle cx="435" cy="227" r="1.2" fill="#e85d54" opacity="0.85"/>
+
+    <!-- Secondary communications mast on eastern tower (x=930, roof y=260) -->
+    <line x1="930" y1="260" x2="930" y2="246" stroke="#3a4b6e" stroke-width="1.8"/>
+    <line x1="930" y1="246" x2="930" y2="240" stroke="#3a4b6e" stroke-width="1"/>
+    <line x1="928" y1="248" x2="932" y2="248" stroke="#3a4b6e" stroke-width="1"/>
+    <circle cx="930" cy="239" r="1.2" fill="#e85d54" opacity="0.8"/>
+
+    <!-- Architectural spire on western skyline tower (x=315, roof y=290) -->
+    <line x1="315" y1="290" x2="315" y2="276" stroke="#3a4b6e" stroke-width="1.4"/>
+    <line x1="315" y1="276" x2="315" y2="271" stroke="#3a4b6e" stroke-width="0.8"/>
+    <circle cx="315" cy="270" r="1" fill="#e85d54" opacity="0.75"/>
+
+    <!-- Whip antenna on far eastern skyline building (x=1045, roof y=320) -->
+    <line x1="1045" y1="320" x2="1045" y2="308" stroke="#3a4b6e" stroke-width="1.2"/>
+    <circle cx="1045" cy="307" r="0.9" fill="#e85d54" opacity="0.7"/>
+<!-- /part:antennae -->
+  </g>
+
+  <g id="blocks">
+<!-- part:blocks -->
+<polygon id="blocks-silhouette" points="0,500 0,400 120,400 120,360 220,360 220,290 310,290 310,380 370,380 370,330 460,330 460,220 560,220 560,350 630,350 630,280 720,280 720,370 800,370 800,310 890,310 890,390 980,390 980,340 1080,340 1080,410 1200,410 1200,500" fill="#152238"/>
+<!-- /part:blocks -->
+<!-- part:rooftops -->
+<!-- Building 6 (x: 460..560, roof y: 220) - Central Tower Penthouses, spire & mechanicals -->
+    <rect x="492" y="210" width="36" height="10" fill="#152238"/>
+    <rect x="500" y="204" width="20" height="6" fill="#182740"/>
+    <rect x="506" y="199" width="8" height="5" fill="#152238"/>
+    <line x1="510" y1="199" x2="510" y2="188" stroke="#152238" stroke-width="1.5"/>
+    <circle cx="510" cy="187" r="1.5" fill="#e85d54"/>
+    <rect x="472" y="215" width="12" height="5" fill="#182740"/>
+    <rect x="536" y="216" width="14" height="4" fill="#182740"/>
+
+    <!-- Building 8 (x: 630..720, roof y: 280) - Stepped bulkhead & water tank -->
+    <rect x="655" y="272" width="26" height="8" fill="#152238"/>
+    <rect x="662" y="266" width="12" height="6" fill="#182740"/>
+    <rect x="692" y="268" width="12" height="9" fill="#1b2a42"/>
+    <polygon points="690,268 698,263 706,268" fill="#152238"/>
+    <line x1="693" y1="277" x2="693" y2="280" stroke="#152238" stroke-width="1.5"/>
+    <line x1="703" y1="277" x2="703" y2="280" stroke="#152238" stroke-width="1.5"/>
+
+    <!-- Building 3 (x: 220..310, roof y: 290) - Mechanical penthouse & water tower -->
+    <rect x="242" y="280" width="26" height="10" fill="#152238"/>
+    <rect x="250" y="275" width="10" height="5" fill="#182740"/>
+    <rect x="276" y="275" width="14" height="10" fill="#1b2a42"/>
+    <polygon points="274,275 283,270 292,275" fill="#152238"/>
+    <line x1="278" y1="285" x2="278" y2="290" stroke="#152238" stroke-width="1.5"/>
+    <line x1="288" y1="285" x2="288" y2="290" stroke="#152238" stroke-width="1.5"/>
+
+    <!-- Building 2 (x: 120..220, roof y: 360) - Bulkhead -->
+    <rect x="158" y="352" width="22" height="8" fill="#152238"/>
+
+    <!-- Building 5 (x: 370..460, roof y: 330) - Mechanical housing -->
+    <rect x="405" y="322" width="24" height="8" fill="#152238"/>
+
+    <!-- Building 10 (x: 800..890, roof y: 310) - Bulkhead -->
+    <rect x="830" y="302" width="22" height="8" fill="#152238"/>
+
+    <!-- Building 12 (x: 980..1080, roof y: 340) - Bulkhead -->
+    <rect x="1015" y="332" width="24" height="8" fill="#152238"/>
+<!-- /part:rooftops -->
+    <g id="windows">
+<!-- part:windows -->
+<rect x="475" y="240" width="10" height="15" fill="#ffd055"/>
+      <rect x="475" y="265" width="10" height="15" fill="#ffd055"/>
+      <rect x="475" y="290" width="10" height="15" fill="#ffaa33"/>
+      <rect x="475" y="315" width="10" height="15" fill="#ffd055"/>
+      <rect x="475" y="340" width="10" height="15" fill="#ffd055"/>
+      <rect x="475" y="365" width="10" height="15" fill="#ffaa33"/>
+      <rect x="475" y="390" width="10" height="15" fill="#ffd055"/>
+      <rect x="475" y="415" width="10" height="15" fill="#ffd055"/>
+      <rect x="475" y="440" width="10" height="15" fill="#ffaa33"/>
+      <rect x="475" y="465" width="10" height="15" fill="#ffd055"/>
+      <rect x="495" y="240" width="10" height="15" fill="#ffaa33"/>
+      <rect x="495" y="265" width="10" height="15" fill="#ffd055"/>
+      <rect x="495" y="290" width="10" height="15" fill="#ffd055"/>
+      <rect x="495" y="315" width="10" height="15" fill="#ffaa33"/>
+      <rect x="495" y="340" width="10" height="15" fill="#ffd055"/>
+      <rect x="495" y="365" width="10" height="15" fill="#ffd055"/>
+      <rect x="495" y="390" width="10" height="15" fill="#ffaa33"/>
+      <rect x="495" y="415" width="10" height="15" fill="#ffd055"/>
+      <rect x="495" y="440" width="10" height="15" fill="#ffd055"/>
+      <rect x="495" y="465" width="10" height="15" fill="#ffaa33"/>
+      <rect x="515" y="240" width="10" height="15" fill="#ffd055"/>
+      <rect x="515" y="265" width="10" height="15" fill="#ffaa33"/>
+      <rect x="515" y="290" width="10" height="15" fill="#ffd055"/>
+      <rect x="515" y="315" width="10" height="15" fill="#ffd055"/>
+      <rect x="515" y="340" width="10" height="15" fill="#ffaa33"/>
+      <rect x="515" y="365" width="10" height="15" fill="#ffd055"/>
+      <rect x="515" y="390" width="10" height="15" fill="#ffd055"/>
+      <rect x="515" y="415" width="10" height="15" fill="#ffaa33"/>
+      <rect x="515" y="440" width="10" height="15" fill="#ffd055"/>
+      <rect x="515" y="465" width="10" height="15" fill="#ffd055"/>
+      <rect x="535" y="240" width="10" height="15" fill="#ffd055"/>
+      <rect x="535" y="265" width="10" height="15" fill="#ffd055"/>
+      <rect x="535" y="290" width="10" height="15" fill="#ffaa33"/>
+      <rect x="535" y="315" width="10" height="15" fill="#ffd055"/>
+      <rect x="535" y="340" width="10" height="15" fill="#ffd055"/>
+      <rect x="535" y="365" width="10" height="15" fill="#ffaa33"/>
+      <rect x="535" y="390" width="10" height="15" fill="#ffd055"/>
+      <rect x="535" y="415" width="10" height="15" fill="#ffd055"/>
+      <rect x="535" y="440" width="10" height="15" fill="#ffaa33"/>
+      <rect x="535" y="465" width="10" height="15" fill="#ffd055"/>
+      <rect x="645" y="300" width="10" height="15" fill="#ffaa33"/>
+      <rect x="645" y="325" width="10" height="15" fill="#ffe077"/>
+      <rect x="645" y="350" width="10" height="15" fill="#ffaa33"/>
+      <rect x="645" y="375" width="10" height="15" fill="#ffe077"/>
+      <rect x="645" y="400" width="10" height="15" fill="#ffaa33"/>
+      <rect x="645" y="425" width="10" height="15" fill="#ffe077"/>
+      <rect x="645" y="450" width="10" height="15" fill="#ffaa33"/>
+      <rect x="645" y="475" width="10" height="15" fill="#ffe077"/>
+      <rect x="665" y="300" width="10" height="15" fill="#ffaa33"/>
+      <rect x="665" y="325" width="10" height="15" fill="#ffe077"/>
+      <rect x="665" y="350" width="10" height="15" fill="#ffaa33"/>
+      <rect x="665" y="375" width="10" height="15" fill="#ffe077"/>
+      <rect x="665" y="400" width="10" height="15" fill="#ffaa33"/>
+      <rect x="665" y="425" width="10" height="15" fill="#ffe077"/>
+      <rect x="665" y="450" width="10" height="15" fill="#ffaa33"/>
+      <rect x="665" y="475" width="10" height="15" fill="#ffe077"/>
+      <rect x="685" y="300" width="10" height="15" fill="#ffaa33"/>
+      <rect x="685" y="325" width="10" height="15" fill="#ffe077"/>
+      <rect x="685" y="350" width="10" height="15" fill="#ffaa33"/>
+      <rect x="685" y="375" width="10" height="15" fill="#ffe077"/>
+      <rect x="685" y="400" width="10" height="15" fill="#ffaa33"/>
+      <rect x="685" y="425" width="10" height="15" fill="#ffe077"/>
+      <rect x="685" y="450" width="10" height="15" fill="#ffaa33"/>
+      <rect x="685" y="475" width="10" height="15" fill="#ffe077"/>
+      <rect x="705" y="300" width="10" height="15" fill="#ffaa33"/>
+      <rect x="705" y="325" width="10" height="15" fill="#ffe077"/>
+      <rect x="705" y="350" width="10" height="15" fill="#ffaa33"/>
+      <rect x="705" y="375" width="10" height="15" fill="#ffe077"/>
+      <rect x="705" y="400" width="10" height="15" fill="#ffaa33"/>
+      <rect x="705" y="425" width="10" height="15" fill="#ffe077"/>
+      <rect x="705" y="450" width="10" height="15" fill="#ffaa33"/>
+      <rect x="705" y="475" width="10" height="15" fill="#ffe077"/>
+      <rect x="235" y="310" width="10" height="15" fill="#ffd055"/>
+      <rect x="235" y="335" width="10" height="15" fill="#ffd055"/>
+      <rect x="235" y="360" width="10" height="15" fill="#ffd055"/>
+      <rect x="235" y="385" width="10" height="15" fill="#ff9922"/>
+      <rect x="235" y="410" width="10" height="15" fill="#ffd055"/>
+      <rect x="235" y="435" width="10" height="15" fill="#ffd055"/>
+      <rect x="235" y="460" width="10" height="15" fill="#ffd055"/>
+      <rect x="255" y="310" width="10" height="15" fill="#ffd055"/>
+      <rect x="255" y="335" width="10" height="15" fill="#ffd055"/>
+      <rect x="255" y="360" width="10" height="15" fill="#ffd055"/>
+      <rect x="255" y="385" width="10" height="15" fill="#ff9922"/>
+      <rect x="255" y="410" width="10" height="15" fill="#ffd055"/>
+      <rect x="255" y="435" width="10" height="15" fill="#ffd055"/>
+      <rect x="255" y="460" width="10" height="15" fill="#ffd055"/>
+      <rect x="275" y="310" width="10" height="15" fill="#ffd055"/>
+      <rect x="275" y="335" width="10" height="15" fill="#ffd055"/>
+      <rect x="275" y="360" width="10" height="15" fill="#ffd055"/>
+      <rect x="275" y="385" width="10" height="15" fill="#ff9922"/>
+      <rect x="275" y="410" width="10" height="15" fill="#ffd055"/>
+      <rect x="275" y="435" width="10" height="15" fill="#ffd055"/>
+      <rect x="275" y="460" width="10" height="15" fill="#ffd055"/>
+      <rect x="295" y="310" width="10" height="15" fill="#ffd055"/>
+      <rect x="295" y="335" width="10" height="15" fill="#ffd055"/>
+      <rect x="295" y="360" width="10" height="15" fill="#ffd055"/>
+      <rect x="295" y="385" width="10" height="15" fill="#ff9922"/>
+      <rect x="295" y="410" width="10" height="15" fill="#ffd055"/>
+      <rect x="295" y="435" width="10" height="15" fill="#ffd055"/>
+      <rect x="295" y="460" width="10" height="15" fill="#ffd055"/>
+<!-- /part:windows -->
+    </g>
+  </g>
+
+  <g id="river">
+<!-- part:river -->
+<rect x="0" y="500" width="1200" height="300" fill="url(#river-grad)"/>
+    <ellipse cx="600" cy="508" rx="550" ry="4" fill="#322842" opacity="0.25"/>
+    <ellipse cx="400" cy="518" rx="280" ry="3" fill="#29243d" opacity="0.2"/>
+    <ellipse cx="800" cy="522" rx="260" ry="3" fill="#29243d" opacity="0.2"/>
+    <ellipse cx="300" cy="542" rx="220" ry="2.5" fill="#202238" opacity="0.2"/>
+    <ellipse cx="900" cy="548" rx="240" ry="2.5" fill="#202238" opacity="0.2"/>
+    <ellipse cx="500" cy="578" rx="360" ry="3" fill="#181c2e" opacity="0.25"/>
+    <ellipse cx="700" cy="625" rx="420" ry="3.5" fill="#121726" opacity="0.3"/>
+    <ellipse cx="550" cy="685" rx="480" ry="4" fill="#0d1220" opacity="0.35"/>
+    <ellipse cx="600" cy="745" rx="520" ry="4.5" fill="#090d18" opacity="0.4"/>
+<!-- /part:river -->
+<!-- part:waterline -->
+    <line id="waterline" x1="0" y1="500" x2="1200" y2="500" stroke="#f59e5a" stroke-width="1.5" opacity="0.7"/>
+<!-- /part:waterline -->
+    <g id="reflections">
+<!-- part:reflections -->
+<!-- Waterline embankment sheen -->
+      <rect x="0" y="500" width="1200" height="4" fill="#fca35d" opacity="0.12"/>
+      <rect x="440" y="500" width="320" height="6" fill="#ffb469" opacity="0.18"/>
+
+      <!-- Sun specular column background glows -->
+      <rect x="550" y="500" width="100" height="280" fill="#fca35d" opacity="0.12"/>
+      <rect x="575" y="500" width="50" height="240" fill="#ffc278" opacity="0.16"/>
+      <rect x="590" y="500" width="20" height="200" fill="#ffe299" opacity="0.20"/>
+
+      <!-- Near block lit window diffuse reflection columns -->
+      <rect x="230" y="500" width="75" height="120" fill="#ffd055" opacity="0.08"/>
+      <rect x="470" y="500" width="75" height="160" fill="#ffd055" opacity="0.09"/>
+      <rect x="640" y="500" width="75" height="130" fill="#ffd055" opacity="0.08"/>
+
+      <!-- Window glimmer water ripple streaks -->
+      <!-- Building 1 window glimmers (x: 220..310) -->
+      <line x1="230" y1="506" x2="252" y2="506" stroke="#ffd055" stroke-width="1.2" opacity="0.30"/>
+      <line x1="250" y1="512" x2="272" y2="512" stroke="#ffaa33" stroke-width="1.2" opacity="0.28"/>
+      <line x1="270" y1="508" x2="298" y2="508" stroke="#ffd055" stroke-width="1.2" opacity="0.30"/>
+      <line x1="235" y1="520" x2="265" y2="520" stroke="#ffd055" stroke-width="1.2" opacity="0.25"/>
+      <line x1="265" y1="526" x2="295" y2="526" stroke="#ffaa33" stroke-width="1.2" opacity="0.25"/>
+      <line x1="225" y1="538" x2="280" y2="538" stroke="#ffd055" stroke-width="1.4" opacity="0.20"/>
+      <line x1="245" y1="552" x2="305" y2="552" stroke="#ff9922" stroke-width="1.4" opacity="0.18"/>
+      <line x1="235" y1="570" x2="295" y2="570" stroke="#ffd055" stroke-width="1.5" opacity="0.15"/>
+
+      <!-- Building 2 window glimmers (x: 460..560) -->
+      <line x1="470" y1="505" x2="500" y2="505" stroke="#ffd055" stroke-width="1.2" opacity="0.35"/>
+      <line x1="510" y1="507" x2="540" y2="507" stroke="#ffd055" stroke-width="1.2" opacity="0.35"/>
+      <line x1="480" y1="515" x2="510" y2="515" stroke="#ffaa33" stroke-width="1.2" opacity="0.30"/>
+      <line x1="505" y1="522" x2="535" y2="522" stroke="#ffd055" stroke-width="1.2" opacity="0.30"/>
+      <line x1="470" y1="532" x2="525" y2="532" stroke="#ffd055" stroke-width="1.4" opacity="0.25"/>
+      <line x1="490" y1="544" x2="545" y2="544" stroke="#ffaa33" stroke-width="1.4" opacity="0.22"/>
+      <line x1="475" y1="560" x2="535" y2="560" stroke="#ffd055" stroke-width="1.4" opacity="0.20"/>
+      <line x1="485" y1="578" x2="540" y2="578" stroke="#ff9922" stroke-width="1.5" opacity="0.16"/>
+      <line x1="470" y1="600" x2="530" y2="600" stroke="#ffd055" stroke-width="1.5" opacity="0.14"/>
+
+      <!-- Building 3 window glimmers (x: 630..720) -->
+      <line x1="640" y1="505" x2="675" y2="505" stroke="#ffe077" stroke-width="1.2" opacity="0.32"/>
+      <line x1="675" y1="508" x2="710" y2="508" stroke="#ffaa33" stroke-width="1.2" opacity="0.30"/>
+      <line x1="650" y1="518" x2="685" y2="518" stroke="#ffe077" stroke-width="1.2" opacity="0.28"/>
+      <line x1="670" y1="525" x2="705" y2="525" stroke="#ffaa33" stroke-width="1.2" opacity="0.25"/>
+      <line x1="645" y1="536" x2="700" y2="536" stroke="#ffe077" stroke-width="1.4" opacity="0.22"/>
+      <line x1="655" y1="550" x2="710" y2="550" stroke="#ffaa33" stroke-width="1.4" opacity="0.18"/>
+      <line x1="645" y1="568" x2="705" y2="568" stroke="#ffe077" stroke-width="1.5" opacity="0.15"/>
+
+      <!-- Setting sun specular reflection ripples (centered at cx = 600) -->
+      <ellipse cx="600" cy="508" rx="40" ry="2.5" fill="#ffe299" opacity="0.45"/>
+      <ellipse cx="600" cy="516" rx="55" ry="3.0" fill="#ffc278" opacity="0.40"/>
+      <ellipse cx="600" cy="526" rx="70" ry="3.5" fill="#ffb368" opacity="0.38"/>
+      <ellipse cx="600" cy="538" rx="85" ry="4.0" fill="#ffa452" opacity="0.35"/>
+      <ellipse cx="600" cy="552" rx="100" ry="4.5" fill="#fca35d" opacity="0.32"/>
+      <ellipse cx="600" cy="568" rx="115" ry="5.0" fill="#fca35d" opacity="0.28"/>
+      <ellipse cx="600" cy="588" rx="130" ry="6.0" fill="#f89350" opacity="0.25"/>
+      <ellipse cx="600" cy="610" rx="145" ry="7.0" fill="#f89350" opacity="0.22"/>
+      <ellipse cx="600" cy="635" rx="160" ry="8.0" fill="#e87e45" opacity="0.18"/>
+      <ellipse cx="600" cy="665" rx="175" ry="9.0" fill="#db6a3d" opacity="0.15"/>
+      <ellipse cx="600" cy="700" rx="190" ry="10.0" fill="#c9583b" opacity="0.12"/>
+      <ellipse cx="600" cy="740" rx="205" ry="12.0" fill="#b54737" opacity="0.09"/>
+
+      <!-- Sun glint highlight horizontal streaks -->
+      <line x1="570" y1="512" x2="630" y2="512" stroke="#fff0b3" stroke-width="1.5" opacity="0.50"/>
+      <line x1="555" y1="522" x2="645" y2="522" stroke="#ffe085" stroke-width="1.5" opacity="0.45"/>
+      <line x1="540" y1="534" x2="660" y2="534" stroke="#ffd066" stroke-width="1.5" opacity="0.40"/>
+      <line x1="525" y1="548" x2="675" y2="548" stroke="#ffb850" stroke-width="1.5" opacity="0.35"/>
+      <line x1="510" y1="564" x2="690" y2="564" stroke="#fca35d" stroke-width="1.5" opacity="0.30"/>
+      <line x1="495" y1="582" x2="705" y2="582" stroke="#fca35d" stroke-width="1.8" opacity="0.25"/>
+      <line x1="480" y1="602" x2="720" y2="602" stroke="#f89350" stroke-width="1.8" opacity="0.22"/>
+      <line x1="465" y1="625" x2="735" y2="625" stroke="#f89350" stroke-width="2.0" opacity="0.18"/>
+      <line x1="450" y1="652" x2="750" y2="652" stroke="#e87e45" stroke-width="2.0" opacity="0.15"/>
+<!-- /part:reflections -->
+<!-- part:blocks-reflection -->
+<polygon id="blocks-reflection" points="0,500 0,600 120,600 120,640 220,640 220,710 310,710 310,620 370,620 370,670 460,670 460,780 560,780 560,650 630,650 630,720 720,720 720,630 800,630 800,690 890,690 890,610 980,610 980,660 1080,660 1080,590 1200,590 1200,500" fill="#0e1726" opacity="0.75"/>
+<!-- /part:blocks-reflection -->
+    </g>
+  </g>
+</svg>

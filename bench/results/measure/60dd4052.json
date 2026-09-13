@@ -1,0 +1,89 @@
+{
+ "run": "60dd4052",
+ "shape": "whole-file",
+ "task": "Draw a pelican riding a bicycle along a beach, as a single s",
+ "status": "fail",
+ "tokens": 37699151,
+ "minutes": 43.3,
+ "startup": {
+  "kept_in_final": null,
+  "tokens": 32739413,
+  "share": 86.8,
+  "seconds": 2009,
+  "agents": 20
+ },
+ "stages": {
+  "build": {
+   "agents": 20,
+   "ok": 15,
+   "tokens": 32739413,
+   "seconds": 2009
+  },
+  "finish": {
+   "agents": 1,
+   "ok": 1,
+   "tokens": 4959738,
+   "seconds": 569
+  }
+ },
+ "division": {
+  "roster": null,
+  "owners": [],
+  "reviewers": [],
+  "block_bytes": {},
+  "block_gini": null,
+  "plan_similarity": {
+   "pairs": 153,
+   "mean": 0.174,
+   "worst": [
+    "bill",
+    "pouch",
+    0.3722943722943723
+   ],
+   "focus": 0.24
+  }
+ },
+ "overlap": {
+  "compared": 78,
+  "worst_pair": [
+   "feet",
+   "shading",
+   0.78
+  ],
+  "near_duplicates": [
+   [
+    "composition",
+    "drivetrain",
+    0.69
+   ],
+   [
+    "composition",
+    "horizon",
+    0.5
+   ],
+   [
+    "composition",
+    "plumage",
+    0.51
+   ],
+   [
+    "composition",
+    "pouch",
+    0.53
+   ],
+   [
+    "composition",
+    "referee",
+    0.58
+   ]
+  ],
+  "duplicate_count": 21
+ },
+ "outcome": {
+  "accepted": true,
+  "tests_passed": 11,
+  "tests_ran": 11,
+  "shipped_candidate": null,
+  "candidates": null
+ }
+}

@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orrery</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #03040a; overflow: hidden; }
+  #sky { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+  #title {
+    position: absolute; left: max(3vw, 18px); top: max(3vh, 16px);
+    font: 300 clamp(13px, 1.5vw, 19px)/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+    letter-spacing: 0.24em; text-transform: uppercase; color: #8fa4c8;
+    pointer-events: none; user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div id="title">Orrery</div>
+
+<script id="orbit-model" type="module">
+/* Pure math. Two-body Keplerian elements in, positions out. No drawing surface and no
+   DOM: the gate runs this block on its own in node and rejects it if it reaches for
+   anything outside arithmetic.
+
+   Length unit: 1 AU. Time unit: 1 second of t.
+   Sign convention: angles increase counter-clockwise in a right-handed (x right, y up)
+   frame; the renderer flips y, so everything orbits clockwise on screen. */
+
+const TAU  = Math.PI * 2;
+const KAY  = 4.0;   // period constant: T = KAY * a^1.5 seconds, for anything orbiting the star
+
+/* a     semi-major axis, AU
+   e     eccentricity
+   w     argument of perihelion, radians (rotates the ellipse in the plane)
+   m0    mean anomaly at t = 0, radians
+   r     draw radius, AU
+   tint  body colour, used by the renderer only                                        */
+
+const STAR = { id: 'sol', kind: 'star', r: 0.30, tint: '#ffd27a' };
+
+const PLANETS = [
+  { id: 'mercury', a: 0.50, e: 0.10, w:  0.35, m0: 0.00, r: 0.045, tint: '#9c9086' },
+  { id: 'venus',   a: 0.85, e: 0.06, w:  2.10, m0: 1.90, r: 0.068, tint: '#e6c089' },
+  { id: 'earth',   a: 1.30, e: 0.05, w: -0.80, m0: 3.40, r: 0.072, tint: '#5691d8' },
+  { id: 'mars',    a: 2.10, e: 0.12, w:  1.25, m0: 0.70, r: 0.056, tint: '#c4633f' },
+  { id: 'jupiter', a: 3.40, e: 0.07, w: -2.30, m0: 4.60, r: 0.160, tint: '#d3a273' },
+  { id: 'saturn',  a: 5.60, e: 0.09, w:  0.90, m0: 2.20, r: 0.135, tint: '#e0cb9b', ring: 2.3 }
+];
+
+const MOONS = [
+  { id: 'luna', parent: 'earth', a: 0.22, e: 0.05, w: 0.4, m0: 1.1, T: 1.1,
+    r: 0.030, tint: '#cfd4e0' }
+];
+
+const COMETS = [
+  { id: 'halley', a: 4.00, e: 0.75, w: -1.65, m0: 2.35, r: 0.034, tint: '#bfe6ff' }
+];
+
+/* Solve M = E - e sin E for the eccentric anomaly. Newton from Danby's starter, which
+   copes with the comet's e = 0.75 in a handful of steps. */
+function anomaly(mean, e) {
+  let m = mean % TAU;
+  if (m > Math.PI) m -= TAU;
+  if (m < -Math.PI) m += TAU;
+  let ecc = m + e * Math.sin(m);
+  for (let i = 0; i < 40; i++) {
+    const step = (ecc - e * Math.sin(ecc) - m) / (1 - e * Math.cos(ecc));
+    ecc -= step;
+    if (Math.abs(step) < 1e-13) break;
+  }
+  return ecc;
+}
+
+/* Position on the ellipse at eccentric anomaly E, rotated by the argument of perihelion.
+   The focus, not the centre, sits at (0, 0) - that is what makes perihelion real. */
+function place(el, ecc) {
+  const px = el.a * (Math.cos(ecc) - el.e);
+  const py = el.a * Math.sqrt(1 - el.e * el.e) * Math.sin(ecc);
+  const c = Math.cos(el.w), s = Math.sin(el.w);
+  return [px * c - py * s, px * s + py * c];
+}
+
+function period(el) {
+  return el.T !== undefined ? el.T : KAY * Math.pow(el.a, 1.5);
+}
+
+function at(el, t) {
+  return place(el, anomaly(el.m0 + TAU * (t / period(el)), el.e));
+}
+
+/* Every body's position at time t, in AU, with the star at the origin. */
+export function positions(t) {
+  const out = [{ id: STAR.id, kind: STAR.kind, x: 0, y: 0, r: STAR.r, tint: STAR.tint }];
+  const found = {};
+  for (const el of PLANETS) {
+    const p = at(el, t);
+    found[el.id] = p;
+    out.push({ id: el.id, kind: 'planet', parent: STAR.id, x: p[0], y: p[1],
+               r: el.r, tint: el.tint, ring: el.ring || 0 });
+  }
+  for (const el of MOONS) {
+    const host = found[el.parent] || [0, 0];
+    const p = at(el, t);
+    out.push({ id: el.id, kind: 'moon', parent: el.parent,
+               x: host[0] + p[0], y: host[1] + p[1], r: el.r, tint: el.tint });
+  }
+  for (const el of COMETS) {
+    const p = at(el, t);
+    out.push({ id: el.id, kind: 'comet', parent: STAR.id, x: p[0], y: p[1],
+               r: el.r, tint: el.tint });
+  }
+  return out;
+}
+
+/* One closed orbit as a polyline, for the guide rings. Moon paths come back centred on
+   the moon's parent, so the renderer offsets them by the parent's current position. */
+export function path(id, steps) {
+  const el = PLANETS.concat(MOONS, COMETS).find(item => item.id === id);
+  if (!el) return [];
+  const out = [];
+  for (let i = 0; i <= steps; i++) out.push(place(el, (i / steps) * TAU));
+  return out;
+}
+
+export const BODIES = PLANETS.map(p => p.id)
+  .concat(MOONS.map(m => m.id), COMETS.map(c => c.id));
+
+/* Aphelion of the widest orbit, so the renderer knows how much sky to cover. */
+export const EXTENT = COMETS[0].a * (1 + COMETS[0].e) + 0.3;
+</script>
+
+<script>
+(function () {
+  var stage = document.getElementById('sky');
+  var ctx = stage.getContext('2d');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var RATE = 0.6;              // model seconds per wall-clock second
+  var model = null, start = null, unit = 1, cx = 0, cy = 0;
+
+  // The model is a module in the page itself; evaluate it from a blob so the page still
+  // makes zero network requests.
+  var src = document.getElementById('orbit-model').textContent;
+  var url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  import(url).then(function (m) { model = m; requestAnimationFrame(frame); });
+
+  function resize() {
+    stage.width = Math.floor(stage.clientWidth * dpr);
+    stage.height = Math.floor(stage.clientHeight * dpr);
+    field = null;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Background stars, laid out once per size with a deterministic generator.
+  var field = null;
+  function seeded(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      var x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function starfield(w, h) {
+    var rand = seeded(20260912);
+    var out = [];
+    for (var i = 0; i < 420; i++) {
+      out.push([rand() * w, rand() * h, 0.3 + 1.1 * Math.pow(rand(), 2.5),
+                0.15 + 0.55 * rand()]);
+    }
+    return out;
+  }
+
+  function px(p) { return [cx + p[0] * unit, cy - p[1] * unit]; }
+
+  function disc(x, y, r, tint, lit) {
+    var g = ctx.createRadialGradient(x - lit[0] * r * 0.45, y - lit[1] * r * 0.45, r * 0.05,
+                                     x, y, r);
+    g.addColorStop(0, tint);
+    g.addColorStop(0.62, tint);
+    g.addColorStop(1, 'rgba(4,6,14,0.92)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, 6.28318);
+    ctx.fill();
+  }
+
+  function guide(pts, ox, oy, alpha) {
+    if (!pts.length) return;
+    ctx.strokeStyle = 'rgba(150,180,235,' + alpha + ')';
+    ctx.lineWidth = Math.max(0.5, dpr * 0.5);
+    ctx.beginPath();
+    for (var i = 0; i < pts.length; i++) {
+      var q = px(pts[i]);
+      if (i === 0) ctx.moveTo(q[0] + ox, q[1] + oy); else ctx.lineTo(q[0] + ox, q[1] + oy);
+    }
+    ctx.stroke();
+  }
+
+  var paths = null;
+
+  function frame(ts) {
+    if (start === null) start = ts;
+    var t = ((ts - start) / 1000) * RATE;
+    var w = stage.width, h = stage.height;
+    cx = w / 2; cy = h / 2;
+    unit = Math.min(w, h) / (model.EXTENT * 2.08);
+    if (!field) field = starfield(w, h);
+    if (!paths) {
+      paths = {};
+      for (var b = 0; b < model.BODIES.length; b++) {
+        paths[model.BODIES[b]] = model.path(model.BODIES[b], 240);
+      }
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#03040a';
+    ctx.fillRect(0, 0, w, h);
+
+    for (var i = 0; i < field.length; i++) {
+      ctx.fillStyle = 'rgba(214,226,255,' + field[i][3].toFixed(3) + ')';
+      ctx.beginPath();
+      ctx.arc(field[i][0], field[i][1], field[i][2] * dpr, 0, 6.28318);
+      ctx.fill();
+    }
+
+    var bodies = model.positions(t);
+    var by = {};
+    for (i = 0; i < bodies.length; i++) by[bodies[i].id] = bodies[i];
+
+    // orbit guides, under everything
+    for (i = 0; i < bodies.length; i++) {
+      var o = bodies[i];
+      if (o.kind === 'star') continue;
+      var host = o.kind === 'moon' ? by[o.parent] : null;
+      var off = host ? px([host.x, host.y]) : [0, 0];
+      guide(paths[o.id] || [], host ? off[0] - cx : 0, host ? off[1] - cy : 0,
+            o.kind === 'comet' ? 0.10 : 0.16);
+    }
+
+    ctx.globalCompositeOperation = 'lighter';
+
+    // the star: a hot disc under a wide corona
+    var halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, by.sol.r * unit * 6);
+    halo.addColorStop(0, 'rgba(255,228,160,0.55)');
+    halo.addColorStop(0.22, 'rgba(255,170,80,0.16)');
+    halo.addColorStop(1, 'rgba(255,140,60,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(cx, cy, by.sol.r * unit * 6, 0, 6.28318);
+    ctx.fill();
+
+    var core = ctx.createRadialGradient(cx, cy, 0, cx, cy, by.sol.r * unit);
+    core.addColorStop(0, '#fffdf4');
+    core.addColorStop(0.55, '#ffdf9a');
+    core.addColorStop(1, 'rgba(255,170,70,0.35)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(cx, cy, by.sol.r * unit, 0, 6.28318);
+    ctx.fill();
+
+    // comets: a head plus a tail blown directly away from the star
+    for (i = 0; i < bodies.length; i++) {
+      var c = bodies[i];
+      if (c.kind !== 'comet') continue;
+      var p = px([c.x, c.y]);
+      var d = Math.hypot(c.x, c.y) || 1e-6;
+      var len = Math.min(3.2, 1.1 / Math.pow(d / 1.4, 1.4)) * unit;
+      var ux = (c.x / d) * len, uy = -(c.y / d) * len;
+      var tail = ctx.createLinearGradient(p[0], p[1], p[0] + ux, p[1] + uy);
+      tail.addColorStop(0, 'rgba(190,235,255,0.45)');
+      tail.addColorStop(0.35, 'rgba(140,200,255,0.14)');
+      tail.addColorStop(1, 'rgba(120,180,255,0)');
+      ctx.strokeStyle = tail;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1.5, c.r * unit * 1.6);
+      ctx.beginPath();
+      ctx.moveTo(p[0], p[1]);
+      ctx.lineTo(p[0] + ux, p[1] + uy);
+      ctx.stroke();
+
+      var head = ctx.createRadialGradient(p[0], p[1], 0, p[0], p[1],
+                                          Math.max(3, c.r * unit * 3));
+      head.addColorStop(0, 'rgba(235,250,255,0.95)');
+      head.addColorStop(0.4, 'rgba(170,220,255,0.35)');
+      head.addColorStop(1, 'rgba(150,200,255,0)');
+      ctx.fillStyle = head;
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], Math.max(3, c.r * unit * 3), 0, 6.28318);
+      ctx.fill();
+    }
+
+    ctx.globalCompositeOperation = 'source-over';
+
+    // planets and moons, each lit from the star
+    for (i = 0; i < bodies.length; i++) {
+      var b = bodies[i];
+      if (b.kind !== 'planet' && b.kind !== 'moon') continue;
+      var q = px([b.x, b.y]);
+      var dist = Math.hypot(q[0] - cx, q[1] - cy) || 1;
+      var lit = [(q[0] - cx) / dist, (q[1] - cy) / dist];
+      var rad = Math.max(2 * dpr, b.r * unit);
+
+      if (b.ring) {
+        ctx.strokeStyle = 'rgba(226,208,166,0.55)';
+        ctx.lineWidth = Math.max(1, rad * 0.30);
+        ctx.beginPath();
+        ctx.arc(q[0], q[1], rad * b.ring * 0.62, 0, 6.28318);
+        ctx.stroke();
+      }
+
+      var glow = ctx.createRadialGradient(q[0], q[1], rad * 0.8, q[0], q[1], rad * 2.6);
+      glow.addColorStop(0, 'rgba(180,205,255,0.16)');
+      glow.addColorStop(1, 'rgba(180,205,255,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(q[0], q[1], rad * 2.6, 0, 6.28318);
+      ctx.fill();
+
+      disc(q[0], q[1], rad, b.tint, lit);
+
+      if (b.kind === 'planet') {
+        ctx.fillStyle = 'rgba(160,180,215,0.45)';
+        ctx.font = (10 * dpr) + 'px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(b.id, q[0], q[1] + rad + 14 * dpr);
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>

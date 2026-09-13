@@ -1,0 +1,269 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 680" width="1000" height="680">
+  <!-- part:backdrop -->
+<rect x="0" y="0" width="1000" height="680" fill="#f4f1ea" />
+<!-- /part:backdrop -->
+
+  <g id="board">
+    <!-- part:frame -->
+<rect id="frame" x="30" y="30" width="575" height="575" rx="8" fill="#d9c2a7" stroke="#7a5839" stroke-width="4" />
+<!-- /part:frame -->
+
+    <g id="squares">
+<!-- part:squares -->
+<rect id="sq-a1" x="60" y="515" width="65" height="65" fill="#b58863" />
+      <rect id="sq-a2" x="60" y="450" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-a3" x="60" y="385" width="65" height="65" fill="#b58863" />
+      <rect id="sq-a4" x="60" y="320" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-a5" x="60" y="255" width="65" height="65" fill="#b58863" />
+      <rect id="sq-a6" x="60" y="190" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-a7" x="60" y="125" width="65" height="65" fill="#b58863" />
+      <rect id="sq-a8" x="60" y="60" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-b1" x="125" y="515" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-b2" x="125" y="450" width="65" height="65" fill="#b58863" />
+      <rect id="sq-b3" x="125" y="385" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-b4" x="125" y="320" width="65" height="65" fill="#b58863" />
+      <rect id="sq-b5" x="125" y="255" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-b6" x="125" y="190" width="65" height="65" fill="#b58863" />
+      <rect id="sq-b7" x="125" y="125" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-b8" x="125" y="60" width="65" height="65" fill="#b58863" />
+      <rect id="sq-c1" x="190" y="515" width="65" height="65" fill="#b58863" />
+      <rect id="sq-c2" x="190" y="450" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-c3" x="190" y="385" width="65" height="65" fill="#b58863" />
+      <rect id="sq-c4" x="190" y="320" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-c5" x="190" y="255" width="65" height="65" fill="#b58863" />
+      <rect id="sq-c6" x="190" y="190" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-c7" x="190" y="125" width="65" height="65" fill="#b58863" />
+      <rect id="sq-c8" x="190" y="60" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-d1" x="255" y="515" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-d2" x="255" y="450" width="65" height="65" fill="#b58863" />
+      <rect id="sq-d3" x="255" y="385" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-d4" x="255" y="320" width="65" height="65" fill="#b58863" />
+      <rect id="sq-d5" x="255" y="255" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-d6" x="255" y="190" width="65" height="65" fill="#b58863" />
+      <rect id="sq-d7" x="255" y="125" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-d8" x="255" y="60" width="65" height="65" fill="#b58863" />
+      <rect id="sq-e1" x="320" y="515" width="65" height="65" fill="#b58863" />
+      <rect id="sq-e2" x="320" y="450" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-e3" x="320" y="385" width="65" height="65" fill="#b58863" />
+      <rect id="sq-e4" x="320" y="320" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-e5" x="320" y="255" width="65" height="65" fill="#b58863" />
+      <rect id="sq-e6" x="320" y="190" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-e7" x="320" y="125" width="65" height="65" fill="#b58863" />
+      <rect id="sq-e8" x="320" y="60" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-f1" x="385" y="515" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-f2" x="385" y="450" width="65" height="65" fill="#b58863" />
+      <rect id="sq-f3" x="385" y="385" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-f4" x="385" y="320" width="65" height="65" fill="#b58863" />
+      <rect id="sq-f5" x="385" y="255" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-f6" x="385" y="190" width="65" height="65" fill="#b58863" />
+      <rect id="sq-f7" x="385" y="125" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-f8" x="385" y="60" width="65" height="65" fill="#b58863" />
+      <rect id="sq-g1" x="450" y="515" width="65" height="65" fill="#b58863" />
+      <rect id="sq-g2" x="450" y="450" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-g3" x="450" y="385" width="65" height="65" fill="#b58863" />
+      <rect id="sq-g4" x="450" y="320" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-g5" x="450" y="255" width="65" height="65" fill="#b58863" />
+      <rect id="sq-g6" x="450" y="190" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-g7" x="450" y="125" width="65" height="65" fill="#b58863" />
+      <rect id="sq-g8" x="450" y="60" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-h1" x="515" y="515" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-h2" x="515" y="450" width="65" height="65" fill="#b58863" />
+      <rect id="sq-h3" x="515" y="385" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-h4" x="515" y="320" width="65" height="65" fill="#b58863" />
+      <rect id="sq-h5" x="515" y="255" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-h6" x="515" y="190" width="65" height="65" fill="#b58863" />
+      <rect id="sq-h7" x="515" y="125" width="65" height="65" fill="#f0d9b5" />
+      <rect id="sq-h8" x="515" y="60" width="65" height="65" fill="#b58863" />
+<!-- /part:squares -->
+    </g>
+
+    <g id="files">
+<!-- part:files -->
+<text id="file-a" x="92.5" y="604.0" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">a</text>
+      <text id="file-b" x="157.5" y="604.0" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">b</text>
+      <text id="file-c" x="222.5" y="604.0" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">c</text>
+      <text id="file-d" x="287.5" y="604.0" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">d</text>
+      <text id="file-e" x="352.5" y="604.0" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">e</text>
+      <text id="file-f" x="417.5" y="604.0" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">f</text>
+      <text id="file-g" x="482.5" y="604.0" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">g</text>
+      <text id="file-h" x="547.5" y="604.0" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">h</text>
+<!-- /part:files -->
+    </g>
+
+    <g id="ranks">
+<!-- part:ranks -->
+<text id="rank-1" x="45" y="553.5" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">1</text>
+      <text id="rank-2" x="45" y="488.5" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">2</text>
+      <text id="rank-3" x="45" y="423.5" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">3</text>
+      <text id="rank-4" x="45" y="358.5" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">4</text>
+      <text id="rank-5" x="45" y="293.5" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">5</text>
+      <text id="rank-6" x="45" y="228.5" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">6</text>
+      <text id="rank-7" x="45" y="163.5" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">7</text>
+      <text id="rank-8" x="45" y="98.5" font-family="sans-serif" font-size="16" font-weight="bold" fill="#443322" text-anchor="middle">8</text>
+<!-- /part:ranks -->
+    </g>
+
+    <g id="pieces">
+<!-- part:pawns -->
+<g id="piece-a2" data-piece="wP" fill="#ffffff" transform="translate(92.5,482.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-b2" data-piece="wP" fill="#ffffff" transform="translate(157.5,482.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-c2" data-piece="wP" fill="#ffffff" transform="translate(222.5,482.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-d2" data-piece="wP" fill="#ffffff" transform="translate(287.5,482.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-f2" data-piece="wP" fill="#ffffff" transform="translate(417.5,482.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-g2" data-piece="wP" fill="#ffffff" transform="translate(482.5,482.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-h2" data-piece="wP" fill="#ffffff" transform="translate(547.5,482.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-e4" data-piece="wP" fill="#ffffff" transform="translate(352.5,352.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-a7" data-piece="bP" fill="#2b2b2b" transform="translate(92.5,157.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-b7" data-piece="bP" fill="#2b2b2b" transform="translate(157.5,157.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-c7" data-piece="bP" fill="#2b2b2b" transform="translate(222.5,157.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-d7" data-piece="bP" fill="#2b2b2b" transform="translate(287.5,157.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-f7" data-piece="bP" fill="#2b2b2b" transform="translate(417.5,157.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-g7" data-piece="bP" fill="#2b2b2b" transform="translate(482.5,157.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-h7" data-piece="bP" fill="#2b2b2b" transform="translate(547.5,157.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-e5" data-piece="bP" fill="#2b2b2b" transform="translate(352.5,287.5)">
+      <circle cx="0" cy="-14" r="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -7,-5 C -7,-10 7,-10 7,-5 C 7,-3 4,-2 4,5 C 8,10 12,14 14,19 L -14,19 C -12,14 -8,10 -4,5 C -4,-2 -7,-3 -7,-5 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+<!-- /part:pawns -->
+<!-- part:rooks -->
+<g id="piece-a1" data-piece="wR" fill="#ffffff" transform="translate(92.5,547.5)">
+      <rect x="-13" y="-18" width="26" height="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -13,-18 L -13,-12 L -10,-12 L -10,-15 L -5,-15 L -5,-12 L 5,-12 L 5,-15 L 10,-15 L 10,-12 L 13,-12 L 13,-18 Z M -9,-11 L 9,-11 L 8,12 L 14,19 L -14,19 L -8,12 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-h1" data-piece="wR" fill="#ffffff" transform="translate(547.5,547.5)">
+      <rect x="-13" y="-18" width="26" height="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -13,-18 L -13,-12 L -10,-12 L -10,-15 L -5,-15 L -5,-12 L 5,-12 L 5,-15 L 10,-15 L 10,-12 L 13,-12 L 13,-18 Z M -9,-11 L 9,-11 L 8,12 L 14,19 L -14,19 L -8,12 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-a8" data-piece="bR" fill="#2b2b2b" transform="translate(92.5,92.5)">
+      <rect x="-13" y="-18" width="26" height="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -13,-18 L -13,-12 L -10,-12 L -10,-15 L -5,-15 L -5,-12 L 5,-12 L 5,-15 L 10,-15 L 10,-12 L 13,-12 L 13,-18 Z M -9,-11 L 9,-11 L 8,12 L 14,19 L -14,19 L -8,12 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-h8" data-piece="bR" fill="#2b2b2b" transform="translate(547.5,92.5)">
+      <rect x="-13" y="-18" width="26" height="7" stroke="#111111" stroke-width="1.5" />
+      <path d="M -13,-18 L -13,-12 L -10,-12 L -10,-15 L -5,-15 L -5,-12 L 5,-12 L 5,-15 L 10,-15 L 10,-12 L 13,-12 L 13,-18 Z M -9,-11 L 9,-11 L 8,12 L 14,19 L -14,19 L -8,12 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+<!-- /part:rooks -->
+<!-- part:knights -->
+    <g id="piece-b1" data-piece="wN" fill="#ffffff" transform="translate(157.5,547.5)">
+      <circle cx="-5" cy="-8" r="1.5" fill="#111111" stroke="none" />
+      <path d="M -14,19 L 14,19 C 12,15 9,13 7,9 C 6,4 9,-1 11,-4 C 11,-7 8,-12 3,-18 C 1,-17 -2,-17 -4,-15 C -4,-13 -3,-10 -6,-9 C -9,-8 -15,-6 -14,2 C -13,6 -10,8 -6,9 C -8,12 -11,15 -14,19 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-f3" data-piece="wN" fill="#ffffff" transform="translate(417.5,417.5)">
+      <circle cx="-5" cy="-8" r="1.5" fill="#111111" stroke="none" />
+      <path d="M -14,19 L 14,19 C 12,15 9,13 7,9 C 6,4 9,-1 11,-4 C 11,-7 8,-12 3,-18 C 1,-17 -2,-17 -4,-15 C -4,-13 -3,-10 -6,-9 C -9,-8 -15,-6 -14,2 C -13,6 -10,8 -6,9 C -8,12 -11,15 -14,19 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-c6" data-piece="bN" fill="#2b2b2b" transform="translate(222.5,222.5)">
+      <circle cx="-5" cy="-8" r="1.5" fill="#111111" stroke="none" />
+      <path d="M -14,19 L 14,19 C 12,15 9,13 7,9 C 6,4 9,-1 11,-4 C 11,-7 8,-12 3,-18 C 1,-17 -2,-17 -4,-15 C -4,-13 -3,-10 -6,-9 C -9,-8 -15,-6 -14,2 C -13,6 -10,8 -6,9 C -8,12 -11,15 -14,19 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-g8" data-piece="bN" fill="#2b2b2b" transform="translate(482.5,92.5)">
+      <circle cx="-5" cy="-8" r="1.5" fill="#111111" stroke="none" />
+      <path d="M -14,19 L 14,19 C 12,15 9,13 7,9 C 6,4 9,-1 11,-4 C 11,-7 8,-12 3,-18 C 1,-17 -2,-17 -4,-15 C -4,-13 -3,-10 -6,-9 C -9,-8 -15,-6 -14,2 C -13,6 -10,8 -6,9 C -8,12 -11,15 -14,19 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+<!-- /part:knights -->
+<!-- part:bishops -->
+<g id="piece-c1" data-piece="wB" fill="#ffffff" transform="translate(222.5,547.5)">
+      <circle cx="0" cy="-20" r="2.5" stroke="#111111" stroke-width="1" />
+      <path d="M 0,-17 C -8,-15 -10,-8 -7,-1 C -5,2 -3,6 -3,10 L 10,10 C 10,6 7,2 5,-1 C 6,-3 4,-7 1,-10 L 5,-8 L 6,-11 L 0,-14 Z M -14,19 L 14,19 C 12,14 8,11 5,10 L -5,10 C -8,11 -12,14 -14,19 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-c4" data-piece="wB" fill="#ffffff" transform="translate(222.5,352.5)">
+      <circle cx="0" cy="-20" r="2.5" stroke="#111111" stroke-width="1" />
+      <path d="M 0,-17 C -8,-15 -10,-8 -7,-1 C -5,2 -3,6 -3,10 L 10,10 C 10,6 7,2 5,-1 C 6,-3 4,-7 1,-10 L 5,-8 L 6,-11 L 0,-14 Z M -14,19 L 14,19 C 12,14 8,11 5,10 L -5,10 C -8,11 -12,14 -14,19 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-c8" data-piece="bB" fill="#2b2b2b" transform="translate(222.5,92.5)">
+      <circle cx="0" cy="-20" r="2.5" stroke="#111111" stroke-width="1" />
+      <path d="M 0,-17 C -8,-15 -10,-8 -7,-1 C -5,2 -3,6 -3,10 L 10,10 C 10,6 7,2 5,-1 C 6,-3 4,-7 1,-10 L 5,-8 L 6,-11 L 0,-14 Z M -14,19 L 14,19 C 12,14 8,11 5,10 L -5,10 C -8,11 -12,14 -14,19 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-f8" data-piece="bB" fill="#2b2b2b" transform="translate(417.5,92.5)">
+      <circle cx="0" cy="-20" r="2.5" stroke="#111111" stroke-width="1" />
+      <path d="M 0,-17 C -8,-15 -10,-8 -7,-1 C -5,2 -3,6 -3,10 L 10,10 C 10,6 7,2 5,-1 C 6,-3 4,-7 1,-10 L 5,-8 L 6,-11 L 0,-14 Z M -14,19 L 14,19 C 12,14 8,11 5,10 L -5,10 C -8,11 -12,14 -14,19 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+<!-- /part:bishops -->
+<!-- part:queens -->
+<g id="piece-d1" data-piece="wQ" fill="#ffffff" transform="translate(287.5,547.5)">
+      <circle cx="0" cy="-21" r="2.5" stroke="#111111" stroke-width="1" />
+      <path d="M -15,-13 L -10,-5 L 0,-11 L 10,-5 L 15,-13 L 11,4 L 14,19 L -14,19 L -11,4 Z M -7,6 L 7,6 L 6,14 L -6,14 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-d8" data-piece="bQ" fill="#2b2b2b" transform="translate(287.5,92.5)">
+      <circle cx="0" cy="-21" r="2.5" stroke="#111111" stroke-width="1" />
+      <path d="M -15,-13 L -10,-5 L 0,-11 L 10,-5 L 15,-13 L 11,4 L 14,19 L -14,19 L -11,4 Z M -7,6 L 7,6 L 6,14 L -6,14 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+<!-- /part:queens -->
+<!-- part:kings -->
+<g id="piece-e1" data-piece="wK" fill="#ffffff" transform="translate(352.5,547.5)">
+      <line x1="0" y1="-24" x2="0" y2="-16" stroke="#111111" stroke-width="2" />
+      <path d="M -4,-21 L 4,-21 M -13,-13 C -14,-7 -10,0 -5,5 L -6,12 L -14,19 L 14,19 L 6,12 L 5,5 C 10,0 14,-7 13,-13 C 8,-15 3,-13 0,-10 C -3,-13 -8,-15 -13,-13 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+    <g id="piece-e8" data-piece="bK" fill="#2b2b2b" transform="translate(352.5,92.5)">
+      <line x1="0" y1="-24" x2="0" y2="-16" stroke="#111111" stroke-width="2" />
+      <path d="M -4,-21 L 4,-21 M -13,-13 C -14,-7 -10,0 -5,5 L -6,12 L -14,19 L 14,19 L 6,12 L 5,5 C 10,0 14,-7 13,-13 C 8,-15 3,-13 0,-10 C -3,-13 -8,-15 -13,-13 Z" stroke="#111111" stroke-width="1.5" stroke-linejoin="round" />
+    </g>
+<!-- /part:kings -->
+    </g>
+  </g>
+
+  <!-- part:panel -->
+<rect id="panel" x="640" y="30" width="330" height="575" rx="12" fill="#ffffff" stroke="#c4b5a0" stroke-width="2" />
+<!-- /part:panel -->
+
+  <!-- part:caption -->
+<text id="caption" x="805" y="85" font-family="sans-serif" font-size="28" font-weight="bold" fill="#222222" text-anchor="middle">Italian Game</text>
+<!-- /part:caption -->
+
+  <g id="moves">
+<!-- part:moves -->
+<text id="move-1" x="680" y="150" font-family="sans-serif" font-size="20" fill="#333333">1. e4 e5</text>
+    <text id="move-2" x="680" y="195" font-family="sans-serif" font-size="20" fill="#333333">2. Nf3 Nc6</text>
+    <text id="move-3" x="680" y="240" font-family="sans-serif" font-size="20" fill="#333333">3. Bc4</text>
+<!-- /part:moves -->
+  </g>
+
+  <!-- part:tomove -->
+<text id="tomove" x="805" y="320" font-family="sans-serif" font-size="22" font-weight="bold" fill="#d9534f" text-anchor="middle">Black to move</text>
+<!-- /part:tomove -->
+</svg>
