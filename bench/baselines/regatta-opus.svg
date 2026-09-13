@@ -1,0 +1,213 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" width="1000" height="620">
+  <title>Three sloops beating to the windward mark</title>
+
+  <defs>
+    <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c6ca6"/>
+      <stop offset="0.45" stop-color="#7fb1d6"/>
+      <stop offset="0.82" stop-color="#c6dcea"/>
+      <stop offset="1" stop-color="#e8eee9"/>
+    </linearGradient>
+    <linearGradient id="seaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#87aec3"/>
+      <stop offset="0.18" stop-color="#5b8fb0"/>
+      <stop offset="0.6" stop-color="#2b6288"/>
+      <stop offset="1" stop-color="#123c5e"/>
+    </linearGradient>
+    <radialGradient id="sunGrad" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff6dd" stop-opacity="0.95"/>
+      <stop offset="0.55" stop-color="#ffe9b2" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#ffe9b2" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sailGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.62" stop-color="#f3efe3"/>
+      <stop offset="1" stop-color="#ded8c6"/>
+    </linearGradient>
+    <linearGradient id="jibGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fbf9f2"/>
+      <stop offset="1" stop-color="#e2dbc8"/>
+    </linearGradient>
+    <linearGradient id="landGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7f98a6"/>
+      <stop offset="1" stop-color="#adc0c8"/>
+    </linearGradient>
+  </defs>
+
+  <rect id="sky" x="0" y="0" width="1000" height="252" fill="url(#skyGrad)"/>
+  <circle id="sun" cx="768" cy="104" r="62" fill="url(#sunGrad)"/>
+  <g id="haze" fill="#ffffff" opacity="0.18">
+    <path d="M 90 168 Q 180 156 268 166 Q 190 176 90 168 Z"/>
+    <path d="M 520 142 Q 628 130 736 142 Q 626 152 520 142 Z"/>
+    <path d="M 300 196 Q 430 188 560 197 Q 430 205 300 196 Z"/>
+  </g>
+
+  <g id="coastline">
+    <path d="M 0 236 L 78 214 L 146 226 L 232 196 L 310 220 L 372 208 L 452 230 L 520 218
+             L 600 232 L 682 212 L 760 228 L 848 206 L 928 224 L 1000 212 L 1000 262 L 0 262 Z"
+          fill="url(#landGrad)" opacity="0.85"/>
+    <path d="M 0 248 L 96 238 L 178 246 L 264 232 L 348 244 L 430 236 L 516 248 L 604 240
+             L 690 250 L 782 236 L 880 248 L 1000 240 L 1000 264 L 0 264 Z"
+          fill="#6d8697" opacity="0.75"/>
+    <path d="M 226 196 L 236 202 L 232 210 L 222 204 Z" fill="#5d7686" opacity="0.8"/>
+    <path d="M 842 206 L 854 214 L 846 220 L 836 212 Z" fill="#5d7686" opacity="0.8"/>
+  </g>
+
+  <rect id="sea" x="0" y="250" width="1000" height="370" fill="url(#seaGrad)"/>
+
+  <g id="swell" fill="none" stroke="#d3e6f1" stroke-linecap="round" opacity="0.5">
+    <path d="M 40 262 Q 66 259 92 262" stroke-width="1"/>
+    <path d="M 250 258 Q 274 255 298 258" stroke-width="1"/>
+    <path d="M 470 266 Q 500 262 530 266" stroke-width="1"/>
+    <path d="M 830 260 Q 856 257 882 260" stroke-width="1"/>
+    <path d="M 120 286 Q 158 281 196 286" stroke-width="1.3"/>
+    <path d="M 420 292 Q 462 287 504 292" stroke-width="1.3"/>
+    <path d="M 760 282 Q 800 277 840 282" stroke-width="1.3"/>
+    <path d="M 60 332 Q 114 325 168 332" stroke-width="1.7"/>
+    <path d="M 520 344 Q 582 336 644 344" stroke-width="1.7"/>
+    <path d="M 820 326 Q 876 319 932 326" stroke-width="1.7"/>
+    <path d="M 150 406 Q 230 395 310 406" stroke-width="2.2"/>
+    <path d="M 600 424 Q 690 412 780 424" stroke-width="2.2"/>
+    <path d="M 40 486 Q 150 470 260 486" stroke-width="2.8"/>
+    <path d="M 480 512 Q 606 494 732 512" stroke-width="2.8"/>
+    <path d="M 760 566 Q 880 546 1000 566" stroke-width="3.2"/>
+    <path d="M 120 574 Q 250 554 380 574" stroke-width="3.2"/>
+  </g>
+
+  <g id="glitter" fill="#ffe9bc" opacity="0.3">
+    <path d="M 742 268 L 794 268 L 788 274 L 748 274 Z"/>
+    <path d="M 730 292 L 806 292 L 798 300 L 738 300 Z"/>
+    <path d="M 714 326 L 822 326 L 810 336 L 726 336 Z"/>
+    <path d="M 692 376 L 844 376 L 826 390 L 710 390 Z"/>
+    <path d="M 664 448 L 872 448 L 846 466 L 690 466 Z"/>
+    <path d="M 628 548 L 908 548 L 874 572 L 662 572 Z"/>
+  </g>
+
+  <g id="wind" stroke="#f2f8fb" fill="none" opacity="0.9">
+    <line id="wind-arrow" x1="60" y1="72" x2="250" y2="84" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 250 84 L 232 74 L 234 88 Z" fill="#f2f8fb" stroke="none"/>
+    <path d="M 76 50 Q 140 46 206 54" stroke-width="1.6" opacity="0.65"/>
+    <path d="M 88 102 Q 150 100 214 108" stroke-width="1.6" opacity="0.65"/>
+    <path d="M 108 126 Q 158 125 208 130" stroke-width="1.3" opacity="0.45"/>
+  </g>
+
+  <g id="boat-3">
+    <g id="wake-3" fill="#ffffff" opacity="0.5">
+      <path d="M 728 290 Q 756 287 792 290 Q 756 293 728 290 Z"/>
+      <path d="M 736 292 Q 760 291 782 293" fill="none" stroke="#ffffff" stroke-width="0.8"/>
+    </g>
+    <g id="bow-3" fill="#ffffff" opacity="0.7">
+      <path d="M 672 291 Q 663 286 653 291 Q 663 294 672 291 Z"/>
+    </g>
+    <g id="hull-3">
+      <path d="M 670 290 L 672 284 Q 700 287 727 284 L 730 290 Z" fill="#eef1f1" stroke="#7d94a1" stroke-width="0.6"/>
+      <line x1="671" y1="288" x2="729" y2="288" stroke="#2f4f6a" stroke-width="1"/>
+      <circle cx="716" cy="285" r="1.6" fill="#31485c"/>
+    </g>
+    <line id="waterline-3" x1="670" y1="290" x2="730" y2="290" stroke="#0f3350" stroke-width="1.2" opacity="0.55"/>
+    <g id="heel-3" transform="rotate(12 700 290)">
+      <line id="mast-3" x1="695" y1="286" x2="695" y2="204" stroke="#5b6b75" stroke-width="1.4"/>
+      <line x1="696" y1="279" x2="726" y2="281" stroke="#5b6b75" stroke-width="1.2"/>
+      <line x1="695" y1="217" x2="672" y2="282" stroke="#7d8b94" stroke-width="0.7"/>
+      <line x1="695" y1="204" x2="730" y2="287" stroke="#7d8b94" stroke-width="0.7"/>
+      <path id="mainsail-3" d="M 695 207 Q 728 245 725 281 L 696 279 Z" fill="url(#sailGrad)" stroke="#b9b2a1" stroke-width="0.7"/>
+      <path id="jib-3" d="M 695 217 Q 712 250 687 280 L 673 283 Z" fill="url(#jibGrad)" stroke="#b9b2a1" stroke-width="0.7"/>
+    </g>
+  </g>
+
+  <g id="flagboat">
+    <g fill="#ffffff" opacity="0.45">
+      <path d="M 866 300 Q 900 297 940 300 Q 900 303 866 300 Z"/>
+    </g>
+    <path d="M 791 300 L 793 290 Q 830 294 866 290 L 869 300 Z" fill="#2f4150" stroke="#1d2b36" stroke-width="0.8"/>
+    <rect x="816" y="281" width="24" height="9" fill="#e9e5d8" stroke="#b9b3a3" stroke-width="0.6"/>
+    <line x1="806" y1="291" x2="806" y2="248" stroke="#4a5b66" stroke-width="1.4"/>
+    <line x1="791" y1="297" x2="869" y2="297" stroke="#d9e2e6" stroke-width="1"/>
+    <g id="flag">
+      <path d="M 806 250 Q 820 254 834 250 L 834 264 Q 820 268 806 264 Z" fill="#d94f3d" stroke="#a93a2c" stroke-width="0.6"/>
+    </g>
+  </g>
+
+  <g id="boat-2">
+    <g id="wake-2" fill="#ffffff" opacity="0.55">
+      <path d="M 380 320 Q 426 315 490 320 Q 426 325 380 320 Z"/>
+      <path d="M 390 323 Q 430 321 470 324" fill="none" stroke="#ffffff" stroke-width="1"/>
+    </g>
+    <g id="bow-2" fill="#ffffff" opacity="0.75">
+      <path d="M 280 321 Q 266 313 250 321 Q 266 325 280 321 Z"/>
+      <path d="M 274 324 Q 262 322 254 325" fill="none" stroke="#ffffff" stroke-width="0.9"/>
+    </g>
+    <g id="hull-2">
+      <path d="M 277 320 L 279 308 Q 330 313 380 309 L 383 320 Z" fill="#c0392b" stroke="#8d2a20" stroke-width="0.8"/>
+      <line x1="279" y1="316" x2="381" y2="316" stroke="#f2ece0" stroke-width="1.6"/>
+      <path d="M 306 309 L 311 303 L 339 302 L 343 308 Z" fill="#e8e4d6" stroke="#b3ada0" stroke-width="0.6"/>
+      <circle cx="356" cy="305" r="2.6" fill="#31485c"/>
+      <circle cx="364" cy="306" r="2.4" fill="#31485c"/>
+    </g>
+    <line id="waterline-2" x1="277" y1="320" x2="383" y2="320" stroke="#0f3350" stroke-width="1.6" opacity="0.55"/>
+    <g id="heel-2" transform="rotate(12 330 320)">
+      <line id="mast-2" x1="322" y1="312" x2="322" y2="168" stroke="#55656f" stroke-width="2.2"/>
+      <line x1="323" y1="302" x2="378" y2="306" stroke="#55656f" stroke-width="1.8"/>
+      <line x1="322" y1="190" x2="281" y2="306" stroke="#78868f" stroke-width="0.9"/>
+      <line x1="322" y1="168" x2="383" y2="311" stroke="#78868f" stroke-width="0.9"/>
+      <path id="mainsail-2" d="M 322 172 Q 372 238 376 305 L 323 302 Z" fill="url(#sailGrad)" stroke="#b9b2a1" stroke-width="0.9"/>
+      <path d="M 330 210 Q 358 232 360 254" fill="none" stroke="#ddd6c5" stroke-width="0.7"/>
+      <path d="M 326 254 Q 362 268 364 288" fill="none" stroke="#ddd6c5" stroke-width="0.7"/>
+      <path id="jib-2" d="M 322 190 Q 352 248 308 303 L 282 307 Z" fill="url(#jibGrad)" stroke="#b9b2a1" stroke-width="0.9"/>
+      <path d="M 316 232 Q 336 252 314 276" fill="none" stroke="#ddd6c5" stroke-width="0.6"/>
+    </g>
+  </g>
+
+  <g id="boat-1">
+    <g id="wake-1" fill="#ffffff" opacity="0.6">
+      <path d="M 646 370 Q 724 361 838 370 Q 724 379 646 370 Z"/>
+      <path d="M 658 374 Q 718 371 782 376" fill="none" stroke="#ffffff" stroke-width="1.4" opacity="0.8"/>
+      <path d="M 664 366 Q 730 363 796 366" fill="none" stroke="#ffffff" stroke-width="1.1" opacity="0.6"/>
+    </g>
+    <g id="bow-1" fill="#ffffff" opacity="0.8">
+      <path d="M 474 371 Q 450 360 424 372 Q 450 377 474 371 Z"/>
+      <path d="M 466 375 Q 446 373 430 377" fill="none" stroke="#ffffff" stroke-width="1.3"/>
+      <path d="M 478 366 Q 462 362 448 366" fill="none" stroke="#ffffff" stroke-width="1"/>
+    </g>
+    <g id="hull-1">
+      <path d="M 470 370 L 473 349 Q 560 358 646 350 L 650 370 Z" fill="#f3f5f5" stroke="#879aa6" stroke-width="1"/>
+      <line x1="472" y1="364" x2="648" y2="364" stroke="#1f3d57" stroke-width="3.4"/>
+      <path d="M 520 350 L 528 341 L 576 340 L 582 349 Z" fill="#e1e6e6" stroke="#a9b3b5" stroke-width="0.8"/>
+      <path d="M 592 348 L 634 347 L 632 353 L 594 354 Z" fill="#cfd7d8" opacity="0.8"/>
+      <circle cx="600" cy="344" r="4.2" fill="#31485c"/>
+      <circle cx="613" cy="345" r="4" fill="#31485c"/>
+      <circle cx="625" cy="346" r="3.8" fill="#31485c"/>
+    </g>
+    <line id="waterline-1" x1="470" y1="370" x2="650" y2="370" stroke="#0d2f4b" stroke-width="2.4" opacity="0.6"/>
+    <g id="heel-1" transform="rotate(12 560 370)">
+      <line id="mast-1" x1="546" y1="356" x2="546" y2="110" stroke="#4f5f69" stroke-width="3.4"/>
+      <line x1="548" y1="342" x2="640" y2="346" stroke="#4f5f69" stroke-width="2.8"/>
+      <line x1="546" y1="150" x2="477" y2="347" stroke="#76848d" stroke-width="1.2"/>
+      <line x1="546" y1="110" x2="650" y2="360" stroke="#76848d" stroke-width="1.2"/>
+      <path id="mainsail-1" d="M 546 116 Q 640 228 638 346 L 548 342 Z" fill="url(#sailGrad)" stroke="#b5ae9d" stroke-width="1.2"/>
+      <path d="M 556 160 Q 606 196 612 232" fill="none" stroke="#dcd5c3" stroke-width="1"/>
+      <path d="M 550 222 Q 622 254 628 292" fill="none" stroke="#dcd5c3" stroke-width="1"/>
+      <path d="M 548 292 Q 616 312 634 334" fill="none" stroke="#dcd5c3" stroke-width="1"/>
+      <path id="jib-1" d="M 546 152 Q 596 250 520 344 L 478 348 Z" fill="url(#jibGrad)" stroke="#b5ae9d" stroke-width="1.2"/>
+      <path d="M 536 196 Q 572 244 528 300" fill="none" stroke="#dcd5c3" stroke-width="0.9"/>
+      <path d="M 522 268 Q 556 292 510 330" fill="none" stroke="#dcd5c3" stroke-width="0.9"/>
+    </g>
+  </g>
+
+  <g id="buoy">
+    <ellipse cx="180" cy="418" rx="34" ry="9" fill="#ffffff" opacity="0.45"/>
+    <path d="M 180 372 L 200 414 L 160 414 Z" fill="#e8823a" stroke="#b45f22" stroke-width="1.2"/>
+    <path d="M 180 372 L 190 393 L 170 393 Z" fill="#f4a463"/>
+    <circle cx="180" cy="412" r="18" fill="#e8823a" stroke="#b45f22" stroke-width="1.2"/>
+    <circle cx="174" cy="406" r="5" fill="#f7b783" opacity="0.8"/>
+    <path d="M 150 416 Q 180 424 210 416 Q 180 430 150 416 Z" fill="#ffffff" opacity="0.5"/>
+  </g>
+
+  <g id="gulls" fill="none" stroke="#f4f8fa" stroke-width="2" stroke-linecap="round">
+    <path d="M 332 128 q 11 -9 21 -1 q 11 -8 21 1"/>
+    <path d="M 398 96 q 9 -8 18 -1 q 9 -7 18 1" stroke-width="1.7"/>
+    <path d="M 452 142 q 12 -10 23 -1 q 12 -9 23 1" stroke-width="2.1"/>
+    <path d="M 508 110 q 8 -7 16 -1 q 8 -6 16 1" stroke-width="1.5"/>
+    <path d="M 286 170 q 7 -6 14 -1 q 7 -6 14 1" stroke-width="1.3"/>
+  </g>
+</svg>

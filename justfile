@@ -114,7 +114,7 @@ sandbox-build:
 
 # verify blueprint invariants without making model calls
 check:
-    python -m unittest discover -s work/tests -v
+    python -m unittest discover -s bench/tests -v
     python -m swarm_workbench monitor --self-check
     python -m swarm_workbench webui --self-check
     python adws/adw_modules/docker_sandbox.py

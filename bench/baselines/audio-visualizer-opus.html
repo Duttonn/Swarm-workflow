@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Radial Spectrum</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #05070d; overflow: hidden; }
+  #stage { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+  #hud {
+    position: absolute; left: max(3vw, 18px); bottom: max(3vh, 16px);
+    font: 300 clamp(11px, 1.1vw, 15px)/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #7f93bd; letter-spacing: 0.14em; text-transform: uppercase;
+    pointer-events: none; user-select: none;
+  }
+  #hud b { color: #e8f0ff; font-weight: 400; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="hud">synthetic mix &middot; <b id="bpm">--</b> bpm &middot; <b id="bands">--</b> bands</div>
+
+<script id="spectrum-model" type="module">
+/* Pure maths. No drawing surface, no DOM, no globals: the gate runs this block on its
+   own in node and rejects it if it reaches for anything outside arithmetic.
+
+   The signal is a fixed synthetic mix, not a recording. Six voices are retriggered on
+   every beat and decay exponentially from that onset, so within a beat every band is
+   monotonically falling. That is what makes the falling peak caps provable rather than
+   merely plausible. */
+
+export const BANDS         = 64;      // spectrum resolution
+export const BEAT_PERIOD   = 0.5;     // seconds per beat -> 120 bpm
+export const BEATS_PER_BAR = 4;
+export const LOOP          = BEAT_PERIOD * BEATS_PER_BAR;   // 2 s, exactly periodic
+
+const F_MIN    = 30;      // Hz at band 0
+const F_MAX    = 16000;   // Hz at band BANDS-1
+const TRIGGERS = 8;       // how many past beats still ring (2 bars, keeps LOOP exact)
+const CAP_TAU  = 0.62;    // peak-cap fall constant, >= every voice tau below
+const CAP_HOLD = 3;       // beats a cap can be held from
+const HEADROOM = 0.94;    // loudest band of the loop maps here, so 0 <= mag <= 1
+
+/* --- the mix --------------------------------------------------------------
+   Each lobe is one partial of one voice: a frequency, a width in bands, a level
+   per beat of the bar, and a decay constant. tau <= CAP_TAU for every lobe. */
+const MIX = [
+  // kick: body plus a short click, hardest on the downbeat
+  { f: () => 52,   spread: 2.4, tau: 0.11, amp: [1.00, 0.80, 0.92, 0.78] },
+  { f: () => 1400, spread: 6.0, tau: 0.03, amp: [0.12, 0.09, 0.11, 0.09] },
+  // snare on 2 and 4: tuned body plus a broad noise burst
+  { f: () => 190,  spread: 3.0, tau: 0.16, amp: [0.00, 0.42, 0.00, 0.38] },
+  { f: () => 2400, spread: 13.0, tau: 0.14, amp: [0.00, 0.50, 0.00, 0.45] },
+  // closed hats on every beat, alternating accent
+  { f: () => 9000, spread: 8.0, tau: 0.05, amp: [0.40, 0.28, 0.44, 0.30] },
+  // bass line, one note per beat, plus its octave
+  { f: (b) => [55, 55, 73.42, 61.74][b],       spread: 2.0, tau: 0.42, amp: [0.85, 0.72, 0.85, 0.78] },
+  { f: (b) => [110, 110, 146.84, 123.48][b],   spread: 2.2, tau: 0.38, amp: [0.30, 0.26, 0.30, 0.28] },
+  // chord: Am then G, three voices each, with second and third harmonics
+  { f: (b) => [220, 220, 196, 196][b],         spread: 2.2, tau: 0.55, amp: [0.34, 0.24, 0.34, 0.24] },
+  { f: (b) => [277.18, 277.18, 246.94, 246.94][b], spread: 2.2, tau: 0.55, amp: [0.32, 0.22, 0.32, 0.22] },
+  { f: (b) => [329.63, 329.63, 293.66, 293.66][b], spread: 2.2, tau: 0.55, amp: [0.30, 0.21, 0.30, 0.21] },
+  { f: (b) => [440, 440, 392, 392][b],         spread: 2.6, tau: 0.50, amp: [0.16, 0.11, 0.16, 0.11] },
+  { f: (b) => [659.26, 659.26, 587.32, 587.32][b], spread: 3.0, tau: 0.46, amp: [0.10, 0.07, 0.10, 0.07] }
+];
+
+function bandOf(hz) {
+  return (BANDS - 1) * Math.log(hz / F_MIN) / Math.log(F_MAX / F_MIN);
+}
+
+/* A lobe spreads over the bands as a gaussian centred on its frequency. The centre is
+   fixed per beat of the bar, so the whole kernel is precomputed once. */
+function kernel(centre, spread) {
+  const w = new Float64Array(BANDS);
+  for (let i = 0; i < BANDS; i++) {
+    const z = (i - centre) / spread;
+    w[i] = Math.exp(-0.5 * z * z);
+  }
+  return w;
+}
+
+const LOBES = [];
+for (let b = 0; b < BEATS_PER_BAR; b++) {
+  const forBeat = [];
+  for (const m of MIX) {
+    if (m.amp[b] <= 0) continue;
+    forBeat.push({ w: kernel(bandOf(m.f(b)), m.spread), amp: m.amp[b], tau: m.tau });
+  }
+  LOBES.push(forBeat);
+}
+
+/* Static noise floor, tilted towards the bass. It never decays, so it is present in the
+   bars and in the caps alike. */
+const FLOOR = new Float64Array(BANDS);
+for (let i = 0; i < BANDS; i++) FLOOR[i] = 0.004 + 0.030 * Math.exp(-i / 26);
+
+function raw(t) {
+  const beat = Math.floor(t / BEAT_PERIOD);
+  const dt = t - beat * BEAT_PERIOD;
+  const out = new Float64Array(FLOOR);
+  for (let k = 0; k < TRIGGERS; k++) {
+    const b = ((beat - k) % BEATS_PER_BAR + BEATS_PER_BAR) % BEATS_PER_BAR;
+    const age = dt + k * BEAT_PERIOD;
+    for (const lobe of LOBES[b]) {
+      const level = lobe.amp * Math.exp(-age / lobe.tau);
+      if (level < 1e-6) continue;
+      const w = lobe.w;
+      for (let i = 0; i < BANDS; i++) out[i] += level * w[i];
+    }
+  }
+  return out;
+}
+
+/* Every band peaks at a beat onset, so the loudest sample of the loop is one of the
+   four downbeats. Normalising against it keeps magnitudes inside 0..1 without clipping,
+   which would break the ordering the caps rely on. */
+const GAIN = (function () {
+  let top = 0;
+  for (let b = 0; b < BEATS_PER_BAR; b++) {
+    const row = raw(b * BEAT_PERIOD);
+    for (let i = 0; i < BANDS; i++) if (row[i] > top) top = row[i];
+  }
+  return HEADROOM / top;
+})();
+
+const FLOOR_S = new Float64Array(BANDS);
+for (let i = 0; i < BANDS; i++) FLOOR_S[i] = FLOOR[i] * GAIN;
+
+/* Band magnitudes of the synthetic mix at time t. Deterministic, 0..1. */
+export function spectrum(t) {
+  const out = raw(t);
+  for (let i = 0; i < BANDS; i++) out[i] *= GAIN;
+  return out;
+}
+
+/* Falling peak caps. A cap is held from a beat onset and falls exponentially with
+   CAP_TAU, which is slower than every voice in the mix - so a cap is never overtaken by
+   its own bar. Each candidate is decreasing in t and the set of candidates only changes
+   at a beat, so between beats the cap is monotonically falling. */
+export function peaks(t) {
+  const phase = t - Math.floor(t / BEAT_PERIOD) * BEAT_PERIOD;
+  const out = new Float64Array(BANDS);
+  for (let k = 0; k < CAP_HOLD; k++) {
+    const onset = t - phase - k * BEAT_PERIOD;
+    const fall = Math.exp(-(t - onset) / CAP_TAU);
+    const held = spectrum(onset);
+    for (let i = 0; i < BANDS; i++) {
+      const v = FLOOR_S[i] + (held[i] - FLOOR_S[i]) * fall;
+      if (v > out[i]) out[i] = v;
+    }
+  }
+  return out;
+}
+
+/* Beat pulse: 1 at a downbeat onset, decaying to near zero before the next beat. */
+export function beat(t) {
+  const b = ((Math.floor(t / BEAT_PERIOD) % BEATS_PER_BAR) + BEATS_PER_BAR) % BEATS_PER_BAR;
+  const phase = t - Math.floor(t / BEAT_PERIOD) * BEAT_PERIOD;
+  return [1.0, 0.72, 0.90, 0.70][b] * Math.exp(-phase / 0.14);
+}
+
+/* Envelope of one lobe of the mix, used to weight the scope partials. */
+function envOf(t, index) {
+  const beatNo = Math.floor(t / BEAT_PERIOD);
+  const dt = t - beatNo * BEAT_PERIOD;
+  const m = MIX[index];
+  let sum = 0;
+  for (let k = 0; k < TRIGGERS; k++) {
+    const b = ((beatNo - k) % BEATS_PER_BAR + BEATS_PER_BAR) % BEATS_PER_BAR;
+    sum += m.amp[b] * Math.exp(-(dt + k * BEAT_PERIOD) / m.tau);
+  }
+  return sum;
+}
+
+const SCOPE_WINDOW = 0.06;   // seconds of signal shown by the ribbon
+const SCOPE = [
+  { index: 0, mul: 1.0, phase: 0.0 },   // kick body
+  { index: 5, mul: 1.0, phase: 0.8 },   // bass fundamental
+  { index: 6, mul: 0.6, phase: 1.7 },   // bass octave
+  { index: 7, mul: 0.7, phase: 2.4 },   // chord root
+  { index: 8, mul: 0.6, phase: 3.1 },   // chord third
+  { index: 9, mul: 0.5, phase: 3.9 }    // chord fifth
+];
+
+/* n samples of the time-domain signal centred on t, in -1..1. */
+export function waveform(t, n) {
+  const parts = SCOPE.map(s => ({
+    hz: MIX[s.index].f(((Math.floor(t / BEAT_PERIOD) % BEATS_PER_BAR) + BEATS_PER_BAR) % BEATS_PER_BAR),
+    a: s.mul * envOf(t, s.index),
+    phase: s.phase
+  }));
+  let total = 0;
+  for (const p of parts) total += Math.abs(p.a);
+  const norm = (0.30 + 0.70 * beat(t)) / (total + 1e-6);
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const s = t + ((n === 1 ? 0.5 : i / (n - 1)) - 0.5) * SCOPE_WINDOW;
+    let v = 0;
+    for (const p of parts) v += p.a * Math.sin(2 * Math.PI * p.hz * s + p.phase);
+    out[i] = v * norm;
+  }
+  return out;
+}
+</script>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var ctx = stage.getContext('2d');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var model = null;
+  var start = null;
+  var lastBeat = -1;
+  var rings = [];
+
+  // The model is the module block above; pull it out of the document and evaluate it as
+  // a module, so the page still makes zero network requests.
+  var src = document.getElementById('spectrum-model').textContent;
+  var url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  import(url).then(function (m) {
+    model = m;
+    document.getElementById('bpm').textContent = Math.round(60 / m.BEAT_PERIOD);
+    document.getElementById('bands').textContent = m.BANDS;
+    requestAnimationFrame(frame);
+  });
+
+  function resize() {
+    stage.width = Math.floor(stage.clientWidth * dpr);
+    stage.height = Math.floor(stage.clientHeight * dpr);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Bass runs warm, treble runs cool: hue is a straight ramp across the bands.
+  function hue(i, n) { return 18 + 232 * (i / n); }
+
+  function ribbon(cx, cy, radius, amp, wave) {
+    var n = wave.length, i, a, r, th;
+    ctx.beginPath();
+    for (i = 0; i < n; i++) {                       // outer edge
+      a = (i / n) * 6.28318 - 1.5708;
+      th = 1.2 + 3.6 * Math.abs(wave[i]);
+      r = radius + wave[i] * amp + th;
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    for (i = n - 1; i >= 0; i--) {                  // back along the inner edge
+      a = (i / n) * 6.28318 - 1.5708;
+      th = 1.2 + 3.6 * Math.abs(wave[i]);
+      r = radius + wave[i] * amp - th;
+      ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function frame(ts) {
+    if (start === null) start = ts;
+    var t = (ts - start) / 1000;
+    var w = stage.width, h = stage.height;
+    var cx = w / 2, cy = h / 2;
+    var unit = Math.min(w, h);
+    var r0 = unit * 0.155;            // inner radius: where every bar starts
+    var len = unit * 0.215;           // bar length at full scale
+    var rw = r0 + len + unit * 0.055; // radius of the waveform ribbon
+    var n = model.BANDS;
+
+    var mags = model.spectrum(t);
+    var caps = model.peaks(t);
+    var pulse = model.beat(t);
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#05070d';
+    ctx.fillRect(0, 0, w, h);
+
+    var wash = ctx.createRadialGradient(cx, cy, 0, cx, cy, rw * 1.25);
+    wash.addColorStop(0, 'rgba(70,110,190,' + (0.10 + 0.14 * pulse).toFixed(3) + ')');
+    wash.addColorStop(0.55, 'rgba(40,60,120,0.05)');
+    wash.addColorStop(1, 'rgba(5,7,13,0)');
+    ctx.fillStyle = wash;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Beat pulse: a ring is emitted on each onset and expands as it fades.
+    var idx = Math.floor(t / model.BEAT_PERIOD);
+    if (idx !== lastBeat) { lastBeat = idx; rings.push({ born: t, power: model.beat(idx * model.BEAT_PERIOD) }); }
+    while (rings.length && t - rings[0].born > 1.1) rings.shift();
+    for (var k = 0; k < rings.length; k++) {
+      var age = (t - rings[k].born) / 1.1;
+      var alpha = (1 - age) * (1 - age) * 0.55 * rings[k].power;
+      ctx.strokeStyle = 'rgba(150,195,255,' + alpha.toFixed(3) + ')';
+      ctx.lineWidth = Math.max(1, unit * 0.004 * (1 - age));
+      ctx.beginPath();
+      ctx.arc(cx, cy, r0 * 0.62 + age * (rw - r0 * 0.62) * 1.15, 0, 6.28318);
+      ctx.stroke();
+    }
+
+    // Waveform ribbon, riding just outside the bars.
+    var wave = model.waveform(t, 360);
+    ctx.fillStyle = 'rgba(126,196,255,0.38)';
+    ribbon(cx, cy, rw, unit * 0.052, wave);
+    ctx.fillStyle = 'rgba(226,242,255,0.30)';
+    ribbon(cx, cy, rw, unit * 0.052 * 0.5, wave);
+
+    // Radial spectrum: one bar per band, swept clockwise from twelve o'clock.
+    var step = 6.28318 / n;
+    ctx.lineCap = 'round';
+    for (var i = 0; i < n; i++) {
+      var a = i * step - 1.5708;
+      var ca = Math.cos(a), sa = Math.sin(a);
+      var mag = mags[i];
+      var end = r0 + mag * len;
+      var hh = hue(i, n);
+
+      ctx.strokeStyle = 'hsla(' + hh.toFixed(0) + ', 92%, ' + (48 + 26 * mag).toFixed(0) + '%, ' +
+                        (0.35 + 0.6 * mag).toFixed(3) + ')';
+      ctx.lineWidth = Math.max(1.2, unit * 0.0072);
+      ctx.beginPath();
+      ctx.moveTo(cx + ca * r0, cy + sa * r0);
+      ctx.lineTo(cx + ca * end, cy + sa * end);
+      ctx.stroke();
+
+      // Falling peak cap: a short tick at the held level.
+      var cr = r0 + caps[i] * len;
+      var tick = unit * 0.006;
+      ctx.strokeStyle = 'hsla(' + hh.toFixed(0) + ', 100%, 86%, 0.9)';
+      ctx.lineWidth = Math.max(1, unit * 0.0035);
+      ctx.beginPath();
+      ctx.moveTo(cx + ca * cr, cy + sa * cr);
+      ctx.lineTo(cx + ca * (cr + tick), cy + sa * (cr + tick));
+      ctx.stroke();
+    }
+
+    // Core: the pulse itself, brightest on the downbeat.
+    var cr2 = r0 * (0.52 + 0.26 * pulse);
+    var core = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr2);
+    core.addColorStop(0, 'rgba(255,250,240,' + (0.55 + 0.40 * pulse).toFixed(3) + ')');
+    core.addColorStop(0.35, 'rgba(255,190,120,' + (0.22 + 0.30 * pulse).toFixed(3) + ')');
+    core.addColorStop(1, 'rgba(120,150,255,0)');
+    ctx.fillStyle = core;
+    ctx.beginPath();
+    ctx.arc(cx, cy, cr2, 0, 6.28318);
+    ctx.fill();
+
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>

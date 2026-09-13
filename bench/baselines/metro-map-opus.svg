@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 760" width="960" height="760" role="img" aria-label="Transit map of Meridian">
+  <title>Meridian Transit Authority network map</title>
+  <defs id="defs">
+    <linearGradient id="paper-wash" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#faf8f2"/>
+      <stop offset="1" stop-color="#efeadd"/>
+    </linearGradient>
+    <linearGradient id="water-wash" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#bcd9e8"/>
+      <stop offset="1" stop-color="#a8cde0"/>
+    </linearGradient>
+  </defs>
+  <g id="map" font-family="Helvetica Neue, Helvetica, Arial, sans-serif">
+    <rect id="backdrop" x="0" y="0" width="960" height="760" fill="url(#paper-wash)"/>
+    <rect x="18" y="18" width="924" height="724" fill="none" stroke="#d9d2c2" stroke-width="2" rx="6"/>
+    <g id="river">
+      <polyline points="40,460 360,460 420,400 560,400 620,460 920,460" fill="none" stroke="#9cc2d6" stroke-width="40" stroke-linejoin="round" stroke-linecap="round" opacity="0.55"/>
+      <polyline id="river-course" points="40,460 360,460 420,400 560,400 620,460 920,460" fill="none" stroke="url(#water-wash)" stroke-width="32" stroke-linejoin="round" stroke-linecap="round"/>
+      <text x="96" y="446" font-size="13" fill="#5f8ba4" letter-spacing="3">RIVER ALDER</text>
+    </g>
+    <g id="bridges" stroke="#5d6470" stroke-width="2.5" stroke-linecap="round">
+      <line x1="222.22" y1="436.67" x2="206.67" y2="452.22"/>
+      <line x1="253.33" y1="467.78" x2="237.78" y2="483.33"/>
+      <line x1="753.33" y1="452.22" x2="737.78" y2="436.67"/>
+      <line x1="722.22" y1="483.33" x2="706.67" y2="467.78"/>
+      <line x1="531" y1="378" x2="509" y2="378"/>
+      <line x1="531" y1="422" x2="509" y2="422"/>
+    </g>
+    <g id="lines" fill="none" stroke-linejoin="round" stroke-linecap="round">
+      <g id="route-a" data-name="Harbour Line">
+        <polyline class="casing" points="80,250 240,250 320,170 600,170 680,250 880,250" stroke="#f5f2ea" stroke-width="13"/>
+        <polyline class="centreline" points="80,250 240,250 320,170 600,170 680,250 880,250" stroke="#d8382c" stroke-width="7"/>
+      </g>
+      <g id="route-b" data-name="Crosstown Line">
+        <polyline class="casing" points="120,110 120,190 200,270 200,430 280,510" stroke="#f5f2ea" stroke-width="13"/>
+        <polyline class="centreline" points="120,110 120,190 200,270 200,430 280,510" stroke="#1c6fb3" stroke-width="7"/>
+      </g>
+      <g id="route-c" data-name="Orchard Line">
+        <polyline class="casing" points="840,110 840,190 760,270 760,430 680,510" stroke="#f5f2ea" stroke-width="13"/>
+        <polyline class="centreline" points="840,110 840,190 760,270 760,430 680,510" stroke="#2f8f4e" stroke-width="7"/>
+      </g>
+      <g id="route-d" data-name="Foundry Line">
+        <polyline class="casing" points="80,410 240,410 320,330 560,330 640,410 880,410" stroke="#f5f2ea" stroke-width="13"/>
+        <polyline class="centreline" points="80,410 240,410 320,330 560,330 640,410 880,410" stroke="#e08a12" stroke-width="7"/>
+      </g>
+      <g id="route-e" data-name="Meridian Line">
+        <polyline class="casing" points="400,110 400,250 520,370 520,430 440,510" stroke="#f5f2ea" stroke-width="13"/>
+        <polyline class="centreline" points="400,110 400,250 520,370 520,430 440,510" stroke="#7b4ea8" stroke-width="7"/>
+      </g>
+    </g>
+    <g id="stations">
+      <g id="ticks">
+        <line class="station tick" data-routes="b" x1="127.37" y1="186.06" x2="116.06" y2="197.37" stroke="#1c6fb3" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="b" x1="208" y1="325.86" x2="192" y2="325.86" stroke="#1c6fb3" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="d" x1="279.87" y1="358.82" x2="291.18" y2="370.13" stroke="#e08a12" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="a" x1="281.41" y1="197.27" x2="292.73" y2="208.59" stroke="#d8382c" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="d" x1="375.62" y1="322" x2="375.62" y2="338" stroke="#e08a12" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="e" x1="417.37" y1="256.06" x2="406.06" y2="267.37" stroke="#7b4ea8" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="a" x1="503.28" y1="162" x2="503.28" y2="178" stroke="#d8382c" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="e" x1="528" y1="428.28" x2="512" y2="428.28" stroke="#7b4ea8" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="d" x1="582.9" y1="341.58" x2="571.58" y2="352.9" stroke="#e08a12" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="a" x1="610.3" y1="168.99" x2="598.99" y2="180.3" stroke="#d8382c" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="d" x1="655.62" y1="402" x2="655.62" y2="418" stroke="#e08a12" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="a" x1="683.33" y1="242.02" x2="672.02" y2="253.33" stroke="#d8382c" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="c" x1="768" y1="325.86" x2="752" y2="325.86" stroke="#2f8f4e" stroke-width="3.5" stroke-linecap="round"/>
+        <line class="station tick" data-routes="c" x1="843.94" y1="197.37" x2="832.63" y2="186.06" stroke="#2f8f4e" stroke-width="3.5" stroke-linecap="round"/>
+      </g>
+      <g id="interchanges">
+        <circle class="station interchange" data-routes="a b" cx="180" cy="250" r="9" fill="#f5f2ea" stroke="#1d2026" stroke-width="3.5"/>
+        <circle class="station interchange" data-routes="b d" cx="200" cy="410" r="9" fill="#f5f2ea" stroke="#1d2026" stroke-width="3.5"/>
+        <circle class="station interchange" data-routes="a e" cx="400" cy="170" r="9" fill="#f5f2ea" stroke="#1d2026" stroke-width="3.5"/>
+        <circle class="station interchange" data-routes="d e" cx="480" cy="330" r="9" fill="#f5f2ea" stroke="#1d2026" stroke-width="3.5"/>
+        <circle class="station interchange" data-routes="c d" cx="760" cy="410" r="9" fill="#f5f2ea" stroke="#1d2026" stroke-width="3.5"/>
+        <circle class="station interchange" data-routes="a c" cx="780" cy="250" r="9" fill="#f5f2ea" stroke="#1d2026" stroke-width="3.5"/>
+      </g>
+      <g id="termini">
+        <circle class="station terminus" data-routes="a" cx="80" cy="250" r="7" fill="#f5f2ea" stroke="#d8382c" stroke-width="4"/>
+        <circle class="station terminus" data-routes="d" cx="80" cy="410" r="7" fill="#f5f2ea" stroke="#e08a12" stroke-width="4"/>
+        <circle class="station terminus" data-routes="b" cx="120" cy="110" r="7" fill="#f5f2ea" stroke="#1c6fb3" stroke-width="4"/>
+        <circle class="station terminus" data-routes="b" cx="280" cy="510" r="7" fill="#f5f2ea" stroke="#1c6fb3" stroke-width="4"/>
+        <circle class="station terminus" data-routes="e" cx="400" cy="110" r="7" fill="#f5f2ea" stroke="#7b4ea8" stroke-width="4"/>
+        <circle class="station terminus" data-routes="e" cx="440" cy="510" r="7" fill="#f5f2ea" stroke="#7b4ea8" stroke-width="4"/>
+        <circle class="station terminus" data-routes="c" cx="680" cy="510" r="7" fill="#f5f2ea" stroke="#2f8f4e" stroke-width="4"/>
+        <circle class="station terminus" data-routes="c" cx="840" cy="110" r="7" fill="#f5f2ea" stroke="#2f8f4e" stroke-width="4"/>
+        <circle class="station terminus" data-routes="a" cx="880" cy="250" r="7" fill="#f5f2ea" stroke="#d8382c" stroke-width="4"/>
+        <circle class="station terminus" data-routes="d" cx="880" cy="410" r="7" fill="#f5f2ea" stroke="#e08a12" stroke-width="4"/>
+      </g>
+    </g>
+    <g id="labels" fill="#1d2026" paint-order="stroke" stroke="#f5f2ea" stroke-width="3.5" stroke-linejoin="round">
+      <text x="168" y="270" text-anchor="end" font-size="12.5" font-weight="700">Kingsgate</text>
+      <text x="212" y="430" text-anchor="start" font-size="12.5" font-weight="700">Foundry Yard</text>
+      <text x="412" y="159" text-anchor="start" font-size="12.5" font-weight="700">Abbey Cross</text>
+      <text x="492" y="319" text-anchor="start" font-size="12.5" font-weight="700">Meridian Square</text>
+      <text x="772" y="399" text-anchor="start" font-size="12.5" font-weight="700">Ironbridge</text>
+      <text x="792" y="270" text-anchor="start" font-size="12.5" font-weight="700">Northgate</text>
+      <text x="80" y="235" text-anchor="middle" font-size="13" font-weight="700">Westmoor</text>
+      <text x="80" y="395" text-anchor="middle" font-size="13" font-weight="700">Colliers Gate</text>
+      <text x="134" y="114" text-anchor="start" font-size="13" font-weight="700">Larkfield</text>
+      <text x="292.02" y="537.02" text-anchor="start" font-size="13" font-weight="700">Quarry End</text>
+      <text x="414" y="114" text-anchor="start" font-size="13" font-weight="700">Crown Hill</text>
+      <text x="452" y="530" text-anchor="start" font-size="13" font-weight="700">Longwater</text>
+      <text x="667.98" y="537.02" text-anchor="end" font-size="13" font-weight="700">Harrowgate</text>
+      <text x="854" y="114" text-anchor="start" font-size="13" font-weight="700">Elmsworth</text>
+      <text x="880" y="235" text-anchor="middle" font-size="13" font-weight="700">Saltmarsh</text>
+      <text x="880" y="395" text-anchor="middle" font-size="13" font-weight="700">Eastlight</text>
+      <text x="133.72" y="180.72" text-anchor="start" font-size="11.5" font-weight="400">Vaultgate</text>
+      <text x="214" y="329.86" text-anchor="start" font-size="11.5" font-weight="400">Stonemill</text>
+      <text x="297.52" y="384.48" text-anchor="start" font-size="11.5" font-weight="400">Marlow Gate</text>
+      <text x="299.07" y="222.93" text-anchor="start" font-size="11.5" font-weight="400">Oakhaven</text>
+      <text x="375.62" y="315" text-anchor="middle" font-size="11.5" font-weight="400">Clay Pits</text>
+      <text x="423.72" y="250.72" text-anchor="start" font-size="11.5" font-weight="400">Silverwood</text>
+      <text x="503.28" y="193" text-anchor="middle" font-size="11.5" font-weight="400">Cutlers Row</text>
+      <text x="506" y="432.28" text-anchor="end" font-size="11.5" font-weight="400">Chapel Row</text>
+      <text x="589.24" y="336.24" text-anchor="start" font-size="11.5" font-weight="400">Signal Box</text>
+      <text x="616.64" y="163.64" text-anchor="start" font-size="11.5" font-weight="400">Palace Fields</text>
+      <text x="655.62" y="433" text-anchor="middle" font-size="11.5" font-weight="400">Ropewalk</text>
+      <text x="689.68" y="236.68" text-anchor="start" font-size="11.5" font-weight="400">Beacon Rise</text>
+      <text x="774" y="329.86" text-anchor="start" font-size="11.5" font-weight="400">Almshouse</text>
+      <text x="850.28" y="211.72" text-anchor="start" font-size="11.5" font-weight="400">Fernhill</text>
+    </g>
+    <g id="masthead" fill="#1d2026">
+      <text x="48" y="62" font-size="30" font-weight="700" letter-spacing="6">MERIDIAN</text>
+      <text x="48" y="84" font-size="13" fill="#5d6470" letter-spacing="4">TRANSIT AUTHORITY &#183; NETWORK MAP</text>
+      <line x1="48" y1="94" x2="330" y2="94" stroke="#1d2026" stroke-width="2"/>
+    </g>
+    <g id="legend" font-size="12.5" fill="#1d2026">
+      <rect x="48" y="578" width="470" height="140" fill="#ffffff" fill-opacity="0.55" stroke="#d9d2c2" stroke-width="1.5" rx="6"/>
+      <text x="68" y="604" font-size="13" font-weight="700" letter-spacing="3">LINES</text>
+      <line x1="68" y1="624" x2="104" y2="624" stroke="#d8382c" stroke-width="7" stroke-linecap="round"/>
+      <text x="116" y="628">Harbour Line</text>
+      <line x1="68" y1="643" x2="104" y2="643" stroke="#1c6fb3" stroke-width="7" stroke-linecap="round"/>
+      <text x="116" y="647">Crosstown Line</text>
+      <line x1="68" y1="662" x2="104" y2="662" stroke="#2f8f4e" stroke-width="7" stroke-linecap="round"/>
+      <text x="116" y="666">Orchard Line</text>
+      <line x1="68" y1="681" x2="104" y2="681" stroke="#e08a12" stroke-width="7" stroke-linecap="round"/>
+      <text x="116" y="685">Foundry Line</text>
+      <line x1="68" y1="700" x2="104" y2="700" stroke="#7b4ea8" stroke-width="7" stroke-linecap="round"/>
+      <text x="116" y="704">Meridian Line</text>
+      <circle cx="300" cy="620" r="9" fill="#f5f2ea" stroke="#1d2026" stroke-width="3.5"/>
+      <text x="320" y="624">Interchange</text>
+      <circle cx="300" cy="648" r="7" fill="#f5f2ea" stroke="#5d6470" stroke-width="4"/>
+      <text x="320" y="652">Terminus</text>
+      <line x1="292" y1="668" x2="308" y2="684" stroke="#5d6470" stroke-width="3.5" stroke-linecap="round"/>
+      <text x="320" y="680">Station stop</text>
+      <line x1="292" y1="700" x2="308" y2="700" stroke="#bcd9e8" stroke-width="9"/>
+      <text x="320" y="704">River crossing</text>
+    </g>
+    <g id="scale" fill="#1d2026" font-size="11">
+      <rect x="600" y="640" width="60" height="9" fill="#1d2026"/>
+      <rect x="660" y="640" width="60" height="9" fill="none" stroke="#1d2026" stroke-width="1.5"/>
+      <rect x="720" y="640" width="60" height="9" fill="#1d2026"/>
+      <text x="600" y="634" text-anchor="middle">0</text>
+      <text x="780" y="634" text-anchor="middle">3 km</text>
+      <text x="600" y="668" fill="#5d6470" letter-spacing="2">SCALE</text>
+    </g>
+    <g id="compass" fill="#1d2026">
+      <circle cx="862" cy="648" r="30" fill="none" stroke="#d9d2c2" stroke-width="1.5"/>
+      <polygon points="862,618 872,652 862,644 852,652" fill="#1d2026"/>
+      <polygon points="862,678 852,644 862,652 872,644" fill="#ffffff" stroke="#5d6470" stroke-width="1.5"/>
+      <text x="862" y="612" text-anchor="middle" font-size="13" font-weight="700">N</text>
+    </g>
+  </g>
+</svg>

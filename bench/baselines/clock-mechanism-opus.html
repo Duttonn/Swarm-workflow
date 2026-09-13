@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Skeleton Regulator</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0d1016; overflow: hidden; }
+  #stage { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+  #plate {
+    position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+    font: 400 10px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: #6b7789; pointer-events: none; user-select: none; white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div id="plate">Skeleton regulator &middot; seconds pendulum &middot; 30-tooth escape wheel</div>
+
+<script id="clock-model" type="module">
+/* Pure maths for a skeleton regulator. No drawing surface, no DOM, no globals: the gate
+   extracts this block on its own, writes it as model.mjs and runs it in node, so every
+   number below has to come out of arithmetic alone.
+
+   Units: degrees for every angle, seconds for t, one shared model unit of length.
+   Angles increase clockwise, matching a plate seen from the front with +y pointing down.
+   The train is cut to a single module, so two meshing wheels touch at their pitch circles
+   and the centre distance is exactly the sum of the two pitch radii. */
+
+const DEG = Math.PI / 180;
+
+const MODULE = 1.6;    // model units of pitch diameter per tooth
+const ESC_TEETH = 30;  // escape wheel: one turn a minute, one tooth per swing
+const SWING = 3.0;     // pendulum half-amplitude, degrees each side of vertical
+
+const pitch = (teeth) => MODULE * teeth / 2;
+
+/* --- where the arbors sit -------------------------------------------------
+   Each one is placed off an arbor already fixed, at exactly the distance its mesh
+   needs, so the geometry can never drift away from the tooth counts. */
+function step(from, deg, dist) {
+  return { x: from.x + dist * Math.cos(deg * DEG), y: from.y + dist * Math.sin(deg * DEG) };
+}
+
+const ARBORS = {};
+ARBORS.centre = { x: 0, y: 0 };                                   // carries the minute hand
+ARBORS.hour   = { x: 0, y: 0 };                                   // concentric, rides on the centre
+ARBORS.barrel = step(ARBORS.centre, 150, pitch(72) + pitch(12));  // going barrel, lower left
+ARBORS.third  = step(ARBORS.centre, -58, pitch(64) + pitch(8));   // upper right
+ARBORS.escape = step(ARBORS.third, -122, pitch(60) + pitch(8));   // top, under the anchor
+ARBORS.motion = step(ARBORS.centre, 200, pitch(10) + pitch(30));  // motion work, behind the dial
+
+function gear(id, arbor, teeth, kind) {
+  return {
+    id: id, arbor: arbor, teeth: teeth, kind: kind,
+    radius: pitch(teeth),
+    cx: ARBORS[arbor].x,
+    cy: ARBORS[arbor].y
+  };
+}
+
+export const GEARS = [
+  gear('barrel',        'barrel', 72, 'barrel'),
+  gear('centre-pinion', 'centre', 12, 'pinion'),
+  gear('centre-wheel',  'centre', 64, 'wheel'),
+  gear('third-pinion',  'third',   8, 'pinion'),
+  gear('third-wheel',   'third',  60, 'wheel'),
+  gear('escape-pinion', 'escape',  8, 'pinion'),
+  gear('escape-wheel',  'escape', ESC_TEETH, 'escape'),
+  gear('cannon-pinion', 'centre', 10, 'pinion'),
+  gear('minute-wheel',  'motion', 30, 'wheel'),
+  gear('minute-pinion', 'motion',  8, 'pinion'),
+  gear('hour-wheel',    'hour',   32, 'wheel')
+];
+
+/* The going train runs barrel -> centre -> third -> escape. The motion work hangs off the
+   cannon pinion and reduces the hour hand to a twelfth of the minute hand; its two pairs
+   are chosen so 10 + 30 = 8 + 32, which is what lets both pairs share one centre distance
+   and keeps the hour wheel concentric with the centre arbor. */
+export const MESHES = [
+  { driver: 'barrel',        driven: 'centre-pinion' },
+  { driver: 'centre-wheel',  driven: 'third-pinion'  },
+  { driver: 'third-wheel',   driven: 'escape-pinion' },
+  { driver: 'cannon-pinion', driven: 'minute-wheel'  },
+  { driver: 'minute-pinion', driven: 'hour-wheel'    }
+];
+
+const BY_ID = {};
+for (const g of GEARS) BY_ID[g.id] = g;
+export const GEAR = BY_ID;
+
+/* --- one rate per arbor, propagated through the meshes --------------------
+   Only one rate is chosen by hand: the centre arbor turns once an hour. Every other
+   arbor falls out of the tooth counts, so no ratio can be typed in wrongly. A mesh
+   reverses the sense of rotation, hence the minus sign. Degrees per second. */
+const RATES = (function () {
+  const r = { centre: 360 / 3600 };
+  for (let pass = 0; pass < MESHES.length; pass++) {
+    for (const m of MESHES) {
+      const a = BY_ID[m.driver], b = BY_ID[m.driven];
+      if (r[a.arbor] !== undefined && r[b.arbor] === undefined) {
+        r[b.arbor] = -r[a.arbor] * a.teeth / b.teeth;
+      } else if (r[b.arbor] !== undefined && r[a.arbor] === undefined) {
+        r[a.arbor] = -r[b.arbor] * b.teeth / a.teeth;
+      }
+    }
+  }
+  return r;
+})();
+
+export const ARBOR_RATE = RATES;
+export const PLAN = { module: MODULE, arbors: ARBORS };
+
+/* The escapement passes one tooth per full swing, so the train sets the beat: at 6 deg/s
+   and 30 teeth the wheel needs 2 s a tooth. That is a seconds pendulum, and the seconds
+   hand can sit straight on the escape arbor. */
+export const PENDULUM = {
+  period: 360 / (ESC_TEETH * Math.abs(RATES.escape)),
+  amplitude: SWING,
+  pivot: { x: ARBORS.escape.x, y: ARBORS.escape.y - 36 },
+  rod: 336,
+  bob: 27
+};
+
+export const DIAL = {
+  radius: 170,
+  chapterOuter: 168,
+  chapterInner: 140,
+  hourMarks: [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330],
+  minuteMarks: Array.from({ length: 60 }, (_, i) => i * 6),
+  numerals: ['XII', 'I', 'II', 'III', 'IIII', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'],
+  hands: { hour: 96, minute: 138, second: 150, tail: 30 }
+};
+
+/* --- the state of the whole clock at time t -------------------------------
+   t is seconds; 0 is twelve o'clock. Angles are unwrapped, clockwise positive. */
+export function state(t) {
+  const wheels = {};
+  for (const arbor in RATES) wheels[arbor] = RATES[arbor] * t;
+  const swing = SWING * Math.cos(2 * Math.PI * t / PENDULUM.period);
+  return {
+    // every hand rides a real arbor: the minute on the centre, the hour on the motion
+    // work, the seconds straight off the escape arbor, which turns once a minute.
+    hands: {
+      hour: wheels.hour,
+      minute: wheels.centre,
+      second: wheels.escape
+    },
+    wheels: wheels,
+    pendulum: swing,
+    anchor: 0.78 * swing   // the crutch leans the anchor with the pendulum
+  };
+}
+</script>
+
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var ctx = stage.getContext('2d');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var DEG = Math.PI / 180;
+  var TAU = Math.PI * 2;
+  var M = null;
+
+  // The model lives in the module block above. Pull it out of the page and evaluate it as
+  // a module, so the page still asks the network for nothing at all.
+  var src = document.getElementById('clock-model').textContent;
+  var blob = new Blob([src], { type: 'text/javascript' });
+  import(URL.createObjectURL(blob)).then(function (m) { M = m; requestAnimationFrame(tick); });
+
+  var BOX = { x0: -215, y0: -190, x1: 215, y1: 300 };   // the world the movement lives in
+
+  function resize() {
+    stage.width = Math.floor(stage.clientWidth * dpr);
+    stage.height = Math.floor(stage.clientHeight * dpr);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function polar(r, deg) { return [r * Math.cos(deg * DEG), r * Math.sin(deg * DEG)]; }
+
+  /* --- teeth ---------------------------------------------------------------
+     One closed path per wheel: root arc, flank, tip, flank, root arc, tooth after tooth.
+     Tip and root widths are fractions of half the tooth pitch, which is what gives a
+     clock wheel its pointed epicycloidal look and a pinion its fat rounded leaves. */
+  var SHAPE = {
+    wheel:  { add: 1.05, ded: 0.55, tip: 0.34, root: 0.72 },
+    pinion: { add: 0.95, ded: 0.60, tip: 0.54, root: 0.88 },
+    barrel: { add: 1.05, ded: 0.45, tip: 0.34, root: 0.72 }
+  };
+
+  function toothPath(g) {
+    var s = SHAPE[g.kind] || SHAPE.wheel;
+    var mod = M.PLAN.module;
+    var rp = g.radius, ra = rp + mod * s.add, rf = rp - mod * s.ded;
+    var n = g.teeth, half = Math.PI / n;
+    ctx.beginPath();
+    for (var i = 0; i < n; i++) {
+      var c = i * TAU / n;
+      var a0 = c - half * s.root, a1 = c - half * s.tip;
+      var a2 = c + half * s.tip, a3 = c + half * s.root;
+      if (i === 0) ctx.moveTo(rf * Math.cos(a0), rf * Math.sin(a0));
+      else ctx.arc(0, 0, rf, c - 2 * half + half * s.root, a0);
+      ctx.quadraticCurveTo(rp * 1.03 * Math.cos(c - half * 0.60),
+                           rp * 1.03 * Math.sin(c - half * 0.60),
+                           ra * Math.cos(a1), ra * Math.sin(a1));
+      ctx.lineTo(ra * Math.cos(a2), ra * Math.sin(a2));
+      ctx.quadraticCurveTo(rp * 1.03 * Math.cos(c + half * 0.60),
+                           rp * 1.03 * Math.sin(c + half * 0.60),
+                           rf * Math.cos(a3), rf * Math.sin(a3));
+    }
+    ctx.closePath();
+    return { ra: ra, rf: rf };
+  }
+
+  /* The escape wheel is a different animal: long backs and sharp hooks leaning the way it
+     runs, so the pallets can lock on to them and let one past a swing. */
+  function escapePath(g) {
+    var mod = M.PLAN.module;
+    var rp = g.radius, ra = rp + mod * 1.6, rf = rp - mod * 0.5;
+    var n = g.teeth, half = Math.PI / n;
+    ctx.beginPath();
+    for (var i = 0; i < n; i++) {
+      var c = i * TAU / n;
+      if (i === 0) ctx.moveTo(rf * Math.cos(c - half), rf * Math.sin(c - half));
+      else ctx.arc(0, 0, rf, c - half - 2 * half + 2 * half, c - half);
+      ctx.lineTo(ra * Math.cos(c + half * 0.30), ra * Math.sin(c + half * 0.30));
+      ctx.quadraticCurveTo(rp * Math.cos(c + half * 0.74), rp * Math.sin(c + half * 0.74),
+                           rf * Math.cos(c + half), rf * Math.sin(c + half));
+    }
+    ctx.closePath();
+    return { ra: ra, rf: rf };
+  }
+
+  function metal(r, warm) {
+    var g = ctx.createLinearGradient(-r, -r, r, r);
+    if (warm) {
+      g.addColorStop(0, '#7d5f1a'); g.addColorStop(0.32, '#e6c76e');
+      g.addColorStop(0.56, '#b68c28'); g.addColorStop(1, '#6a4f14');
+    } else {
+      g.addColorStop(0, '#46525f'); g.addColorStop(0.36, '#a6b6c8');
+      g.addColorStop(0.6, '#667386'); g.addColorStop(1, '#333c48');
+    }
+    return g;
+  }
+
+  /* crossings: the pierced spokes of a clock wheel */
+  function crossings(rim, hub, n) {
+    for (var i = 0; i < n; i++) {
+      var a = i * TAU / n, w = 3.4;
+      var cx = Math.cos(a), sy = Math.sin(a);
+      ctx.beginPath();
+      ctx.moveTo(cx * hub - sy * w, sy * hub + cx * w);
+      ctx.lineTo(cx * rim - sy * w * 0.7, sy * rim + cx * w * 0.7);
+      ctx.lineTo(cx * rim + sy * w * 0.7, sy * rim - cx * w * 0.7);
+      ctx.lineTo(cx * hub + sy * w, sy * hub - cx * w);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function drawGear(g, rot) {
+    ctx.save();
+    ctx.translate(g.cx, g.cy);
+    ctx.rotate(rot * DEG);
+    var warm = g.kind !== 'pinion';
+    var edge = g.kind === 'escape' ? escapePath(g) : toothPath(g);
+    var brass = metal(edge.ra, warm);
+    ctx.fillStyle = brass;
+    ctx.fill();
+    ctx.lineWidth = 0.55;
+    ctx.strokeStyle = 'rgba(18,14,6,0.55)';
+    ctx.stroke();
+
+    var hub = Math.max(5.5, edge.rf * 0.19);
+    if (edge.rf > 26 && g.kind !== 'pinion') {
+      // the wheel is pierced between rim and hub: sink the field, then lay the crossings
+      ctx.fillStyle = 'rgba(11,15,22,0.70)';
+      ctx.beginPath(); ctx.arc(0, 0, edge.rf - 5.5, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(20,15,6,0.5)';
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+      ctx.fillStyle = brass;
+      crossings(edge.rf - 4.2, hub, g.kind === 'barrel' ? 6 : 5);
+      ctx.beginPath(); ctx.arc(0, 0, hub, 0, TAU); ctx.fill();
+    }
+
+    if (g.kind === 'barrel') mainspring(edge.rf - 9);
+    if (g.kind === 'escape') {
+      ctx.fillStyle = 'rgba(11,15,22,0.55)';
+      ctx.beginPath(); ctx.arc(0, 0, edge.rf * 0.62, 0, TAU); ctx.fill();
+      ctx.fillStyle = brass;
+      crossings(edge.rf * 0.62, 5.5, 4);
+      ctx.beginPath(); ctx.arc(0, 0, 5.5, 0, TAU); ctx.fill();
+    }
+
+    // arbor end and its highlight
+    ctx.fillStyle = '#28303c';
+    ctx.beginPath(); ctx.arc(0, 0, 3.3, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(220,235,255,0.45)';
+    ctx.beginPath(); ctx.arc(-0.9, -0.9, 1.2, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  /* the spring itself, coiled inside the going barrel */
+  function mainspring(r) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(196,214,236,0.5)';
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    var turns = 7, start = 8.5, steps = turns * 72;
+    for (var i = 0; i <= steps; i++) {
+      var a = i / 72 * TAU;
+      var rr = start + (r - start) * (i / steps);
+      var x = rr * Math.cos(a), y = rr * Math.sin(a);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* --- the escapement ------------------------------------------------------
+     The pallets are placed where the escape wheel's tooth tips actually pass, so the
+     anchor spans the right arc instead of a guessed one. */
+  function anchorGeometry() {
+    var esc = M.GEAR['escape-wheel'];
+    var p = M.PENDULUM.pivot;
+    var tip = esc.radius + M.PLAN.module * 1.6;
+    var dx = tip * Math.cos(210 * DEG);
+    var dy = tip * Math.sin(210 * DEG) + (esc.cy - p.y);
+    return { arm: Math.hypot(dx, dy), span: Math.atan2(-dx, dy) / DEG };
+  }
+
+  function anchor(deg) {
+    var geo = anchorGeometry();
+    var p = M.PENDULUM.pivot;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(deg * DEG);
+    ctx.beginPath();
+    ctx.moveTo(-7, -6);
+    for (var s = -1; s <= 1; s += 2) {
+      var a = (90 + s * geo.span) * DEG;
+      var co = Math.cos(a), si = Math.sin(a);
+      ctx.lineTo(co * geo.arm * 0.34 - s * 3, si * geo.arm * 0.34);
+      ctx.lineTo(co * geo.arm, si * geo.arm);                       // pallet tip
+      ctx.lineTo(Math.cos(a - s * 7 * DEG) * (geo.arm - 7.5),
+                 Math.sin(a - s * 7 * DEG) * (geo.arm - 7.5));      // pallet face
+      ctx.lineTo(co * geo.arm * 0.30 + s * 3, si * geo.arm * 0.30);
+      if (s < 0) ctx.lineTo(7, -6);
+    }
+    ctx.closePath();
+    var g = ctx.createLinearGradient(-geo.arm, 0, geo.arm, 0);
+    g.addColorStop(0, '#56616f'); g.addColorStop(0.5, '#b3c1d1'); g.addColorStop(1, '#48525f');
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(9,12,18,0.7)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.fillStyle = '#1a202a';
+    ctx.beginPath(); ctx.arc(0, 0, 4.2, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  function pendulum(deg) {
+    var P = M.PENDULUM;
+    ctx.save();
+    ctx.translate(P.pivot.x, P.pivot.y);
+    ctx.rotate(deg * DEG);
+    ctx.strokeStyle = '#8a97a6';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, P.rod); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath(); ctx.moveTo(-0.9, 4); ctx.lineTo(-0.9, P.rod - 20); ctx.stroke();
+
+    var g = ctx.createRadialGradient(-P.bob * 0.45, P.rod - P.bob * 0.45, P.bob * 0.08,
+                                     0, P.rod, P.bob * 1.5);
+    g.addColorStop(0, '#f3da95'); g.addColorStop(0.45, '#c39a34'); g.addColorStop(1, '#694d11');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(0, P.rod, P.bob, P.bob * 1.08, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(28,20,5,0.6)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,244,214,0.32)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.arc(0, P.rod, P.bob * 0.6, 0, TAU); ctx.stroke();
+    // rating nut under the bob
+    ctx.fillStyle = '#97771f';
+    ctx.beginPath();
+    ctx.moveTo(-5, P.rod + P.bob * 1.06);
+    ctx.lineTo(5, P.rod + P.bob * 1.06);
+    ctx.lineTo(3.2, P.rod + P.bob * 1.06 + 7);
+    ctx.lineTo(-3.2, P.rod + P.bob * 1.06 + 7);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  /* --- the frame the movement is hung on ----------------------------------- */
+  function plates() {
+    var A = M.PLAN.arbors;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    var spine = [A.barrel, A.centre, A.third, A.escape];
+    ctx.strokeStyle = 'rgba(150,122,58,0.30)';
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(spine[0].x, spine[0].y);
+    for (var i = 1; i < spine.length; i++) ctx.lineTo(spine[i].x, spine[i].y);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(234,208,142,0.16)';
+    ctx.lineWidth = 2.4;
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(150,122,58,0.26)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(-104, 282); ctx.lineTo(A.barrel.x, A.barrel.y);
+    ctx.moveTo(104, 282); ctx.lineTo(A.third.x, A.third.y);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(150,122,58,0.34)';
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.moveTo(-150, 282); ctx.lineTo(150, 282);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /* --- the dial ------------------------------------------------------------ */
+  function dial() {
+    var D = M.DIAL, i, a, p0, p1;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(243,237,222,0.85)';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(0, 0, D.chapterOuter, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, D.chapterInner, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = 'rgba(205,174,104,0.75)';
+    ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.arc(0, 0, D.chapterOuter + 7, 0, TAU); ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(236,230,214,0.8)';
+    ctx.lineWidth = 1.0;
+    for (i = 0; i < D.minuteMarks.length; i++) {
+      a = D.minuteMarks[i] - 90;
+      p0 = polar(D.chapterOuter - 8, a); p1 = polar(D.chapterOuter, a);
+      ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.stroke();
+    }
+    ctx.strokeStyle = '#f5f0e3';
+    ctx.lineWidth = 3.2;
+    for (i = 0; i < D.hourMarks.length; i++) {
+      a = D.hourMarks[i] - 90;
+      p0 = polar(D.chapterInner, a); p1 = polar(D.chapterOuter, a);
+      ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.stroke();
+    }
+    ctx.fillStyle = '#f5f0e3';
+    ctx.font = '600 18px "Times New Roman", Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (i = 0; i < D.numerals.length; i++) {
+      a = D.hourMarks[i] - 90;
+      p0 = polar((D.chapterInner + D.chapterOuter) / 2, a);
+      ctx.save();
+      ctx.translate(p0[0], p0[1]);
+      ctx.rotate(D.hourMarks[i] * DEG);
+      ctx.fillText(D.numerals[i], 0, 0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function hand(len, tail, width, deg, colour) {
+    ctx.save();
+    ctx.rotate(deg * DEG);
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    ctx.moveTo(0, tail);
+    ctx.lineTo(-width, tail * 0.25);
+    ctx.lineTo(-width * 0.5, -len * 0.58);
+    ctx.lineTo(-width * 1.6, -len * 0.70);
+    ctx.lineTo(-width * 0.7, -len * 0.84);
+    ctx.lineTo(0, -len);
+    ctx.lineTo(width * 0.7, -len * 0.84);
+    ctx.lineTo(width * 1.6, -len * 0.70);
+    ctx.lineTo(width * 0.5, -len * 0.58);
+    ctx.lineTo(width, tail * 0.25);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(228,238,255,0.30)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function secondHand(deg) {
+    var D = M.DIAL;
+    ctx.save();
+    ctx.rotate(deg * DEG);
+    ctx.strokeStyle = '#c4553a';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, D.hands.tail + 10);
+    ctx.lineTo(0, -D.hands.second);
+    ctx.stroke();
+    ctx.fillStyle = '#c4553a';
+    ctx.beginPath(); ctx.arc(0, D.hands.tail + 10, 5, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  function backdrop(w, h) {
+    var g = ctx.createRadialGradient(w / 2, h * 0.44, 8, w / 2, h * 0.44, Math.max(w, h) * 0.8);
+    g.addColorStop(0, '#1d2432');
+    g.addColorStop(0.55, '#121825');
+    g.addColorStop(1, '#080a10');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  var ORDER = ['barrel', 'hour-wheel', 'minute-wheel', 'minute-pinion', 'cannon-pinion',
+               'centre-pinion', 'centre-wheel', 'third-pinion', 'third-wheel',
+               'escape-pinion', 'escape-wheel'];
+
+  function draw(t) {
+    var w = stage.width, h = stage.height;
+    backdrop(w, h);
+
+    var scale = Math.min(w / (BOX.x1 - BOX.x0), h / (BOX.y1 - BOX.y0)) * 0.95;
+    ctx.save();
+    ctx.translate(w / 2 - ((BOX.x0 + BOX.x1) / 2) * scale,
+                  h / 2 - ((BOX.y0 + BOX.y1) / 2) * scale);
+    ctx.scale(scale, scale);
+
+    var s = M.state(t);
+    plates();
+
+    for (var i = 0; i < ORDER.length; i++) {
+      var g = M.GEAR[ORDER[i]];
+      ctx.globalAlpha = (g.arbor === 'motion' || g.arbor === 'hour') ? 0.6 : 1;
+      drawGear(g, s.wheels[g.arbor]);
+    }
+    ctx.globalAlpha = 1;
+
+    pendulum(s.pendulum);
+    anchor(s.anchor);
+    dial();
+
+    var D = M.DIAL;
+    hand(D.hands.hour, D.hands.tail, 5.2, s.hands.hour, '#1b2432');
+    hand(D.hands.minute, D.hands.tail, 3.9, s.hands.minute, '#1b2432');
+    secondHand(s.hands.second);
+    ctx.fillStyle = '#2c3murky';
+    ctx.beginPath(); ctx.arc(0, 0, 6.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(240,246,255,0.5)';
+    ctx.beginPath(); ctx.arc(-1.5, -1.5, 2, 0, TAU); ctx.fill();
+
+    ctx.restore();
+  }
+
+  function tick() {
+    var now = new Date();
+    var t = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
+          + now.getMilliseconds() / 1000;
+    draw(t);
+    requestAnimationFrame(tick);
+  }
+})();
+</script>
+</body>
+</html>

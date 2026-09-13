@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fractal Garden</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0b1014; overflow: hidden; }
+  #plot { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+  #caption {
+    position: absolute; left: max(3vw, 18px); bottom: max(3vh, 16px);
+    font: 300 clamp(13px, 1.5vw, 19px)/1.5 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+    color: rgba(226, 240, 226, 0.62); letter-spacing: 0.14em; text-transform: uppercase;
+    pointer-events: none; user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="plot"></canvas>
+<div id="caption">a garden, from one seed</div>
+
+<script id="garden-model" type="module">
+/* Pure math. No drawing surface, no DOM, no globals, no Math.random: the gate runs this
+   file on its own in node and rejects it if it reaches for anything outside arithmetic.
+
+   Geometry: the ground line is y = 0 and +y points up, x runs -EXTENT..EXTENT.
+   grow(t) takes t in seconds since sowing. The growth stage is min(1, t / GROW_SECONDS):
+   depth deepens with t, every child is shorter and thinner than its parent, and the same
+   t always yields the same garden. Past GROW_SECONDS the plants are final and only the
+   breeze keeps moving. */
+
+export const EXTENT = 520;
+export const GROW_SECONDS = 16;
+
+const SEED = 20260912;
+const BLOOM_AT = 0.82;   // fraction of GROW_SECONDS by which every segment is extended
+const OPEN_SPAN = 0.12;  // fraction of GROW_SECONDS a flower takes to open
+
+/* mulberry32: deterministic, so the same seed always gives the same plant. */
+function rng(seed) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let x = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const rand = rng(SEED);
+const span = (len) => 0.25 + 0.06 * len;   // seconds to extend a segment, before scaling
+
+const PLAN = [];
+
+/* A plan entry is a segment: where it starts (roots only), its angle relative to its
+   parent, its final length and width, when it starts extending and how long it takes. */
+function put(e) {
+  e.parent = e.parent === undefined ? -1 : e.parent;
+  e.flower = false;
+  e.child = false;
+  e.born = e.parent < 0 ? e.born : PLAN[e.parent].born + PLAN[e.parent].span;
+  e.span = span(e.len);
+  if (e.parent >= 0) PLAN[e.parent].child = true;
+  PLAN.push(e);
+  return PLAN.length - 1;
+}
+
+/* --- the tree: recursive branching, two or three children, each a fixed fraction of
+   its parent so no branch can ever outgrow the limb carrying it. ------------------ */
+const TREE_DEPTH = 7;
+const TREE_LEN = 0.74;   // child length / parent length
+const TREE_W = 0.70;     // child width / parent width
+
+function branch(parent, depth) {
+  const p = PLAN[parent];
+  if (depth > TREE_DEPTH || (depth >= 5 && rand() < 0.14)) {
+    p.flower = true;
+    return;
+  }
+  const n = (depth <= 3 && rand() < 0.30) ? 3 : 2;
+  const spread = 0.62 - 0.03 * depth;
+  for (let i = 0; i < n; i++) {
+    const side = (i - (n - 1) / 2) / Math.max(1, (n - 1) / 2);
+    const kid = put({
+      angle: side * spread + (rand() - 0.5) * 0.26,
+      len: p.len * (TREE_LEN + (rand() - 0.5) * 0.08),
+      w: p.w * TREE_W,
+      depth: depth,
+      parent: parent,
+      kind: "tree",
+      sway: 0.0075,
+      speed: 0.55 + rand() * 0.2,
+      phase: rand() * 6.283,
+      delay: rand()
+    });
+    branch(kid, depth + 1);
+  }
+}
+
+function plantTree(x0) {
+  const root = put({
+    x: x0, y: 0,
+    angle: Math.PI / 2 + (rand() - 0.5) * 0.1,
+    len: 0.20 * EXTENT, w: 11.5,
+    depth: 0, parent: -1, kind: "tree", born: 0.15,
+    sway: 0.0075, speed: 0.6, phase: rand() * 6.283, delay: 0
+  });
+  branch(root, 1);
+}
+
+/* --- the fern: an L-system. Axiom X, X -> F+[[X]-X]-F[-FX]+X, F -> FF, read by a
+   turtle. Every F hangs off the segment before it at a fixed shrink, which is what
+   turns the classic even-length plant into a tapering frond. --------------------- */
+const FERN_N = 4;
+const FERN_TURN = 0.4363;   // 25 degrees
+const FERN_LEN = 0.93;
+const FERN_W = 0.94;
+
+function lsystem(n) {
+  let s = "X";
+  for (let i = 0; i < n; i++) {
+    let next = "";
+    for (const c of s) {
+      if (c === "X") next += "F+[[X]-X]-F[-FX]+X";
+      else if (c === "F") next += "FF";
+      else next += c;
+    }
+    s = next;
+  }
+  return s;
+}
+
+function plantFern(x0, lean) {
+  const word = lsystem(FERN_N);
+  let parent = -1;
+  let turn = 0;
+  let len = 0.046 * EXTENT;
+  let w = 3.4;
+  const stack = [];
+  for (const c of word) {
+    if (c === "F") {
+      parent = put({
+        x: x0, y: 0,
+        angle: parent < 0 ? Math.PI / 2 + lean : turn,
+        len: len, w: w,
+        depth: parent < 0 ? 0 : PLAN[parent].depth + 1,
+        parent: parent, kind: "fern", born: 0.05,
+        sway: 0.021, speed: 0.8 + rand() * 0.25, phase: rand() * 6.283, delay: 0
+      });
+      turn = 0;
+      len *= FERN_LEN;
+      w *= FERN_W;
+    } else if (c === "+") {
+      turn += FERN_TURN;
+    } else if (c === "-") {
+      turn -= FERN_TURN;
+    } else if (c === "[") {
+      stack.push([parent, turn, len, w]);
+    } else if (c === "]") {
+      const s = stack.pop();
+      parent = s[0]; turn = s[1]; len = s[2]; w = s[3];
+    }
+  }
+}
+
+/* --- the lawn: short tapering blades that lean with the breeze. ----------------- */
+function plantGrass(count) {
+  for (let i = 0; i < count; i++) {
+    const x0 = (i / (count - 1) * 1.96 - 0.98) * EXTENT + (rand() - 0.5) * 12;
+    const speed = 1.0 + rand() * 0.8;
+    const phase = rand() * 6.283;
+    const lean = (rand() - 0.5) * 0.5;
+    let parent = -1;
+    let len = (0.036 + rand() * 0.042) * EXTENT;
+    let w = 1.7 + rand() * 1.3;
+    const blades = 4;
+    for (let d = 0; d < blades; d++) {
+      parent = put({
+        x: x0, y: 0,
+        angle: d === 0 ? Math.PI / 2 + lean : lean * 0.35 + (rand() - 0.5) * 0.1,
+        len: len, w: w,
+        depth: d, parent: parent, kind: "grass", born: rand() * 0.7,
+        sway: 0.105, speed: speed, phase: phase, delay: 0
+      });
+      len *= 0.86;
+      w *= 0.78;
+    }
+  }
+}
+
+plantFern(-0.44 * EXTENT, -0.22);
+plantFern(-0.72 * EXTENT, 0.16);
+plantTree(0.34 * EXTENT);
+plantGrass(64);
+
+/* Every segment waits for its parent to finish, so the whole garden is extended by
+   BLOOM_AT * GROW_SECONDS; the rest of the clock belongs to the flowers. */
+let last = 0;
+for (const e of PLAN) last = Math.max(last, e.born + e.span);
+const K = (BLOOM_AT * GROW_SECONDS) / last;
+for (const e of PLAN) {
+  e.born *= K;
+  e.span *= K;
+  e.opens = e.born + e.span + e.delay * 0.14 * GROW_SECONDS;
+}
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+export function grow(t) {
+  const out = [];
+  const seen = new Array(PLAN.length).fill(-1);
+  const ax = new Array(PLAN.length);
+  const ay = new Array(PLAN.length);
+  const aa = new Array(PLAN.length);
+  for (let i = 0; i < PLAN.length; i++) {
+    const e = PLAN[i];
+    const base = e.parent < 0 ? e.angle : aa[e.parent] + e.angle;
+    const a = base + e.sway * Math.sin(t * e.speed + e.phase);
+    const bx = e.parent < 0 ? e.x : ax[e.parent];
+    const by = e.parent < 0 ? e.y : ay[e.parent];
+    aa[i] = a;
+    ax[i] = bx + Math.cos(a) * e.len;
+    ay[i] = by + Math.sin(a) * e.len;
+    const g = clamp01((t - e.born) / e.span);
+    if (g <= 0.002) continue;
+    seen[i] = out.length;
+    out.push({
+      x1: bx, y1: by,
+      x2: bx + Math.cos(a) * e.len * g,
+      y2: by + Math.sin(a) * e.len * g,
+      w: e.w,
+      depth: e.depth,
+      parent: e.parent < 0 ? -1 : seen[e.parent],
+      kind: e.kind,
+      flower: e.flower ? clamp01((t - e.opens) / (OPEN_SPAN * GROW_SECONDS)) : 0
+    });
+  }
+  return out;
+}
+</script>
+
+<script>
+(function () {
+  var plot = document.getElementById('plot');
+  var ctx = plot.getContext('2d');
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var model = null;
+  var start = null;
+
+  // The model lives in the module block above; pull it out of the document and evaluate
+  // it as a module so the page still makes zero network requests.
+  var src = document.getElementById('garden-model').textContent;
+  var url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  import(url).then(function (m) { model = m; requestAnimationFrame(frame); });
+
+  function resize() {
+    plot.width = Math.floor(plot.clientWidth * dpr);
+    plot.height = Math.floor(plot.clientHeight * dpr);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function backdrop(w, h, groundY) {
+    var sky = ctx.createLinearGradient(0, 0, 0, groundY);
+    sky.addColorStop(0, '#0d1b2a');
+    sky.addColorStop(0.55, '#1d3a3f');
+    sky.addColorStop(1, '#3c5a46');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, groundY);
+
+    var sun = ctx.createRadialGradient(w * 0.22, groundY * 0.78, 0,
+                                       w * 0.22, groundY * 0.78, h * 0.45);
+    sun.addColorStop(0, 'rgba(255, 214, 150, 0.26)');
+    sun.addColorStop(0.5, 'rgba(210, 170, 120, 0.07)');
+    sun.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sun;
+    ctx.fillRect(0, 0, w, groundY);
+
+    var soil = ctx.createLinearGradient(0, groundY, 0, h);
+    soil.addColorStop(0, '#2c3d27');
+    soil.addColorStop(0.3, '#20291c');
+    soil.addColorStop(1, '#12160f');
+    ctx.fillStyle = soil;
+    ctx.fillRect(0, groundY, w, h - groundY);
+
+    ctx.strokeStyle = 'rgba(180, 214, 150, 0.16)';
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.beginPath();
+    ctx.moveTo(0, groundY);
+    ctx.lineTo(w, groundY);
+    ctx.stroke();
+  }
+
+  function shade(s, depth, maxDepth) {
+    var k = maxDepth > 0 ? depth / maxDepth : 0;
+    if (s.kind === 'tree') {
+      return 'hsl(' + (26 + 34 * k) + ', ' + (34 - 8 * k) + '%, ' + (21 + 20 * k) + '%)';
+    }
+    if (s.kind === 'fern') {
+      return 'hsl(' + (128 - 26 * k) + ', ' + (44 + 14 * k) + '%, ' + (26 + 22 * k) + '%)';
+    }
+    return 'hsl(' + (92 - 16 * k) + ', ' + (46 + 10 * k) + '%, ' + (30 + 16 * k) + '%)';
+  }
+
+  function petals(x, y, open, unit, tint) {
+    var r = (1.6 + 7.4 * open) * unit;
+    var glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3.4);
+    glow.addColorStop(0, 'rgba(255, 214, 232, ' + (0.24 * open).toFixed(3) + ')');
+    glow.addColorStop(1, 'rgba(255, 214, 232, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 3.4, 0, 6.28318);
+    ctx.fill();
+
+    ctx.fillStyle = tint;
+    for (var i = 0; i < 5; i++) {
+      var a = i * 1.25664 + open * 0.4;
+      ctx.beginPath();
+      ctx.ellipse(x + Math.cos(a) * r * 0.62, y + Math.sin(a) * r * 0.62,
+                  r * 0.62, r * 0.38, a, 0, 6.28318);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255, 232, 170, ' + (0.55 + 0.45 * open).toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(0.6, r * 0.3), 0, 6.28318);
+    ctx.fill();
+  }
+
+  var ORDER = { fern: 0, tree: 1, grass: 2 };
+
+  function frame(ts) {
+    if (start === null) start = ts;
+    var t = (ts - start) / 1000;
+    var w = plot.width, h = plot.height;
+    var groundY = h * 0.84;
+    backdrop(w, h, groundY);
+
+    var EXTENT = model.EXTENT;
+    var unit = Math.min(w / (2.2 * EXTENT), h / (1.05 * EXTENT));
+    var cx = w / 2;
+    var sx = function (x) { return cx + x * unit; };
+    var sy = function (y) { return groundY - y * unit; };
+
+    var segs = model.grow(t);
+    var maxDepth = 1;
+    for (var i = 0; i < segs.length; i++) {
+      if (segs[i].depth > maxDepth) maxDepth = segs[i].depth;
+    }
+
+    var drawn = segs.slice().sort(function (a, b) {
+      return (ORDER[a.kind] - ORDER[b.kind]) || (a.depth - b.depth);
+    });
+
+    ctx.lineCap = 'round';
+    for (var j = 0; j < drawn.length; j++) {
+      var s = drawn[j];
+      ctx.strokeStyle = shade(s, s.depth, maxDepth);
+      ctx.lineWidth = Math.max(0.55, s.w * unit);
+      ctx.beginPath();
+      ctx.moveTo(sx(s.x1), sy(s.y1));
+      ctx.lineTo(sx(s.x2), sy(s.y2));
+      ctx.stroke();
+    }
+
+    for (var k = 0; k < segs.length; k++) {
+      var f = segs[k];
+      if (f.flower > 0) {
+        var tint = 'rgba(' + (242 - 30 * (f.depth % 3)) + ', 168, ' +
+                   (196 + 14 * (f.depth % 2)) + ', ' + (0.55 + 0.4 * f.flower).toFixed(3) + ')';
+        petals(sx(f.x2), sy(f.y2), f.flower, unit, tint);
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+</body>
+</html>
