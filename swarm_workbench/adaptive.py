@@ -91,22 +91,36 @@ def plan(spec, runner, model, records=(), requested=None, maximum=4):
         reasons.append('%d contract features at %d per owner needs %d owners.'
                        % (len(build), per_owner, size))
     key = fingerprint(spec)
+    whole = os.environ.get('SWARM_WHOLE_FILE_MODEL') or spec.get('whole_file_model') or model
     matching = [r for r in records if r.get('spec_hash') == key and r.get('runner') == runner
                 and r.get('model') == model and r.get('quality_kind') == 'fixed_tests_and_required_ui'
-                and r.get('accepted') is True and r.get('elapsed_seconds') is not None]
+                and r.get('accepted') is True and r.get('elapsed_seconds') is not None
+                and r.get('whole_file_model', whole) == whole]
     sources = []
     if matching:
-        # Median per size keeps one unusually quick sample from dominating repeat evidence.
-        from statistics import median
+        # Ranking accepted runs by elapsed time rewards a lucky sample: one 60-second success
+        # among ninety-nine failures beats ten reliable 120-second runs, and the failures cost
+        # real wall clock and real quota. Rank on what a working artifact actually costs -
+        # every attempt's seconds divided by the artifacts that came out acceptable - so an
+        # unreliable size pays for its own failures.
+        attempts = [r for r in records if r.get('spec_hash') == key and r.get('runner') == runner
+                    and r.get('model') == model and r.get('elapsed_seconds') is not None]
         groups = {}
-        for r in matching:
-            groups.setdefault(int(r['agents']), []).append(r)
-        eligible = {n: rs for n, rs in groups.items() if 1 <= n <= maximum}
+        for r in attempts:
+            groups.setdefault(int(r.get('agents') or 1), []).append(r)
+        won = {r['run_id'] for r in matching}
+        eligible = {n: rs for n, rs in groups.items()
+                    if 1 <= n <= maximum and any(r.get('run_id') in won for r in rs)}
         if eligible:
-            size = min(eligible, key=lambda n: (median(r['elapsed_seconds'] for r in eligible[n]), n))
-            sources = [r['run_id'] for r in eligible[size]]
-            reasons = ['Fastest observed median among accepted runs on the identical contract/provider/model.',
-                       '%s matching samples for this size; this is not proof of a universal optimum.' % len(sources)]
+            def paid(rs):
+                kept = sum(1 for r in rs if r.get('run_id') in won)
+                return sum(r['elapsed_seconds'] for r in rs) / kept
+            size = min(eligible, key=lambda n: (paid(eligible[n]), n))
+            sources = [r['run_id'] for r in eligible[size] if r.get('run_id') in won]
+            reasons = ['Fewest seconds paid per accepted artifact (%.0fs at %d owners), counting '
+                       'the failed attempts at each size.' % (paid(eligible[size]), size),
+                       '%s of %s attempts at this size were accepted; this is not proof of a '
+                       'universal optimum.' % (len(sources), len(eligible[size]))]
     recent_failures = [r for r in records if r.get('spec_hash') == key and r.get('runner') == runner
                        and r.get('model') == model and r.get('accepted') is False]
     if not matching and recent_failures:
@@ -128,6 +142,7 @@ def plan(spec, runner, model, records=(), requested=None, maximum=4):
     return {'selected_agents': size, 'difficulty': difficulty, 'reasons': reasons,
             'source_runs': sources, 'runner': runner, 'model': model, 'spec_hash': key,
             'roles': roster[:size], 'skills': [],
+            'whole_file_model': whole,
             'token_limit': int(os.environ.get('SWARM_RUN_TOKEN_LIMIT', '180000')),
             'output_limit': int(os.environ.get('SWARM_AGENT_OUTPUT_LIMIT', '12000')),
             'call_timeout_seconds': int(os.environ.get('SWARM_CALL_TIMEOUT', '240')),

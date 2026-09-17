@@ -68,6 +68,36 @@ class ReducedRoster(unittest.TestCase):
         _, groups, _ = assign_groups(list(SPEC['agents']), 1)
         self.assertEqual(len(groups[0][1]), 16)
 
+class Objective(unittest.TestCase):
+    """What a size costs is every attempt it took, not the ones that happened to work."""
+
+    def records(self):
+        key = adaptive.fingerprint(SPEC)
+        base = {'spec_hash': key, 'runner': 'cline', 'model': 'free',
+                'quality_kind': 'fixed_tests_and_required_ui'}
+        rows = [dict(base, run_id='fast-win', agents=1, accepted=True, elapsed_seconds=60)]
+        rows += [dict(base, run_id='fast-loss-%d' % i, agents=1, accepted=False,
+                      elapsed_seconds=60, stop_reason='gate red') for i in range(4)]
+        rows += [dict(base, run_id='slow-win-%d' % i, agents=4, accepted=True,
+                      elapsed_seconds=120) for i in range(2)]
+        return rows
+
+    def test_a_lucky_fast_size_loses_to_a_reliable_one(self):
+        plan = adaptive.plan(SPEC, 'cline', 'free', self.records(), None, 5)
+        self.assertEqual(plan['selected_agents'], 4)
+        self.assertEqual(sorted(plan['source_runs']), ['slow-win-0', 'slow-win-1'])
+        self.assertTrue(any('per accepted artifact' in r for r in plan['reasons']))
+
+    def test_a_size_with_no_accepted_run_is_not_eligible(self):
+        rows = [r for r in self.records() if r['run_id'] != 'fast-win']
+        plan = adaptive.plan(SPEC, 'cline', 'free', rows, None, 5)
+        self.assertEqual(plan['selected_agents'], 4)
+
+    def test_runs_that_used_a_different_whole_file_model_are_not_compared(self):
+        rows = [dict(r, whole_file_model='other') for r in self.records()]
+        plan = adaptive.plan(SPEC, 'cline', 'free', rows, None, 5)
+        self.assertEqual(plan['source_runs'], [], 'a different prototype model is a different run')
+
 
 if __name__ == '__main__':
     unittest.main()

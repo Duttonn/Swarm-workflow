@@ -91,6 +91,7 @@ def main():
     if allocation:
         adaptive.remember({'run_id': run.adw_id, 'spec_hash': adaptive.fingerprint(spec),
                           'runner': runner, 'model': model, 'agents': allocation['selected_agents'],
+                          'whole_file_model': allocation['whole_file_model'],
                           'accepted': accepted and code == 0, 'elapsed_seconds': round(time.monotonic() - started, 2),
                           'tokens': None if run.__dict__.get('usage_unknown') else run.tokens,
                           'init_seconds': run.__dict__.get('init_seconds'),
