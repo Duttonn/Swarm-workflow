@@ -280,3 +280,8 @@ cap); a reduced roster gets the twenty blocks regrouped into one contiguous bloc
 
 Built on [Super Simple Software Factory](https://github.com/disler/super-simple-software-factory) by
 IndyDevDan, MIT licensed (see [`LICENSE-SSSF`](LICENSE-SSSF)).
+
+## License
+
+MIT, see [`LICENSE`](LICENSE). The vendored Super Simple Software Factory keeps its own MIT notice in
+[`LICENSE-SSSF`](LICENSE-SSSF). Issues and pull requests are welcome.
