@@ -89,6 +89,49 @@ def load(run_id):
     return row, phases, events
 
 
+def coordination(events):
+    """Did the agents actually talk to each other, or just work next to each other?
+
+    Dan's read of his own runs is that low coordination predicts a low result, so it is worth a
+    number rather than a vibe: how many posts, how many of them addressed someone, how many
+    distinct agents posted, and whether the traffic died out before the run did.
+    """
+    posts, tools, coord_calls = [], 0, 0
+    claims = releases = dones = 0
+    for typ, name, raw in events:
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            payload = {}
+        if typ == 'board_post':
+            posts.append({'agent': payload.get('agent'), 'at': payload.get('posted_at'),
+                          'mentions': payload.get('mentions') or []})
+        elif typ == 'tool_call':
+            tools += 1
+            args = json.dumps(payload.get('parameters') or {})
+            if 'swarm.py' in args:
+                coord_calls += 1
+        elif typ == 'coordination':
+            claims = payload.get('claims') or 0
+            releases = payload.get('releases') or 0
+            dones = payload.get('done') or 0
+            # the CLI runners' tool events carry no command text, so the board's own log is
+            # the count of coordination calls that survives every runner
+            coord_calls = max(coord_calls, (payload.get('inbox_reads') or 0) + claims + releases + dones)
+    addressed = [p for p in posts if p['mentions']]
+    stamps = sorted(p['at'] for p in posts if p['at'])
+    halves = None
+    if len(stamps) >= 4:
+        mid = stamps[len(stamps) // 2]
+        first = len([s for s in stamps if s <= mid])
+        halves = '%d then %d' % (first, len(stamps) - first)
+    return {'posts': len(posts), 'posters': len({p['agent'] for p in posts}),
+            'addressed': len(addressed),
+            'addressed_share': round(len(addressed) / len(posts), 2) if posts else None,
+            'per_half': halves, 'tool_calls': tools, 'coord_tool_calls': coord_calls,
+            'claims': claims, 'releases': releases, 'done_declared': dones}
+
+
 def measure(run_id):
     (status, total, started, ended, request), phases, events = load(run_id)
     sess = SESSIONS / run_id
@@ -222,6 +265,7 @@ def measure(run_id):
         'overlap': {'compared': len(sims), 'worst_pair': worst,
                     'near_duplicates': duplicated[:5],
                     'duplicate_count': len(duplicated)},
+        'coordination': coordination(events),
         'outcome': {'accepted': bool(payload.get('gate_pass', {}).get('acceptance')),
                     'tests_passed': (int(ran.group(1)) - bad) if ran else None,
                     'tests_ran': int(ran.group(1)) if ran else None,
@@ -254,6 +298,13 @@ def show(r):
               % (sim.get('focus'), sim['mean'], sim['worst']))
     print('   work overlap %d pairs compared on the names they produce, worst %s, pairs sharing '
           'half their scope: %d' % (o['compared'], o['worst_pair'], o['duplicate_count']))
+    c = r.get('coordination') or {}
+    if c:
+        print('   coordination %d posts from %d agents, %s addressed to someone (%s), %s per half'
+              % (c['posts'], c['posters'], c['addressed'], c['addressed_share'], c['per_half']))
+        print('   tools       %d tool calls, %d of them coordination calls; claims %d, releases '
+              '%d, done declared %d' % (c['tool_calls'], c['coord_tool_calls'], c['claims'],
+                                        c['releases'], c['done_declared']))
     out = r['outcome']
     print('   outcome     accepted=%s tests %s/%s shipped=%s %s'
           % (out['accepted'], out['tests_passed'], out['tests_ran'],

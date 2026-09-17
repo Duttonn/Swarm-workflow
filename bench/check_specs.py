@@ -32,8 +32,9 @@ def flaws(spec, path):
     if out:
         return out
     agents = spec['agents']
-    if len(agents) != 20:
-        out.append('roster is %d agents, expected 20' % len(agents))
+    # 16 owners + 4 reviewers is the ladder's shape; spec 20 has twenty owners, so 24
+    if not 20 <= len(agents) <= 24:
+        out.append('roster is %d agents, expected 20 to 24' % len(agents))
     if len(set(agents)) != len(agents):
         out.append('duplicate agent names')
     if any(not re.fullmatch(r'[a-z][a-z0-9_-]*', a) for a in agents):
@@ -46,8 +47,10 @@ def flaws(spec, path):
     for banned in ('requests', 'urllib', 'http'):
         if re.search(r'import %s' % banned, spec['tests']):
             out.append('tests reach the network (%s)' % banned)
-    if Path(spec['output_file']).suffix not in ('.svg', '.html'):
-        out.append('output_file must be .svg or .html')
+    # .js joined the list for server specs: their suite boots the file over HTTP on a local
+    # port instead of parsing it, so urllib in the tests is the client, not a network reach.
+    if Path(spec['output_file']).suffix not in ('.svg', '.html', '.js'):
+        out.append('output_file must be .svg, .html or .js')
     if (spec.get('budget') or {}).get('tokens') != 30000000:
         out.append('budget is %s' % (spec.get('budget'),))
     return out

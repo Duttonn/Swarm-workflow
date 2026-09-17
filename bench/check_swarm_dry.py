@@ -53,6 +53,11 @@ DRAFT = ('"""dry run draft"""\n\n\n'
          '    return 1\n'
          '# /part:b\n')
 BLOCKS = {'part:a': 'def answer():\n    return 42', 'part:b': 'def helper():\n    return 7'}
+# Tagged posts: the prototype addresses each owner, then a tells everyone. Each note must
+# reach only the agents it tags, at their next turn, without anyone re-reading the board.
+NOTES = {'prototype': [('prototype--note-1.md', '@b\nhelper() must return 7, the tests need it.'),
+                       ('prototype--note-2.md', '@a\nanswer() must return 42.')],
+         'part:a': [('a--note-1.md', '@all\nblock a verified, returns 42.')]}
 SEEN, BOXES = {}, {}
 
 
@@ -74,6 +79,8 @@ def fake_invoke(req, messages, cancel):
     BOXES[key] = req.sandbox
     messages.put((req.agent, {'event': 'step_update', 'step_update': {
         'step_type': 'tool', 'tool_name': 'read_file', 'agent': req.agent}}))
+    for name, text in NOTES.get(key, []):
+        (Path(req.shared[0]) / name).write_text(text, encoding='utf-8')
     if stage == 'part':
         # verify.py makes agents put their block on disk; b dies right after doing so, which is
         # exactly what the salvage path exists for
@@ -126,6 +133,19 @@ def main():
         assert (board / name).exists(), 'missing on the board: %s' % name
     assert (board / 'a--part.py').read_text(encoding='utf-8').strip() == BLOCKS['part:a']
 
+    # one group thread, every post in order; each owner's brief carries the note tagged for it
+    # and not its neighbour's, the finisher gets the @all note, and a note delivered once is
+    # not delivered again at the agent's next turn
+    thread = (board / 'thread.md').read_text(encoding='utf-8')
+    order = [thread.index('(%s)' % n) for n in ('prototype--note-1.md', 'prototype--note-2.md',
+                                                 'a--note-1.md')]
+    assert order == sorted(order), thread
+    assert '@prototype (prototype--note-1.md): @b helper() must return 7' in thread, thread
+    assert 'helper() must return 7' in SEEN['part:b'] and 'must return 42' not in SEEN['part:b']
+    assert 'answer() must return 42' in SEEN['part:a'] and 'must return 7' not in SEEN['part:a']
+    assert 'block a verified' in SEEN['finisher'], SEEN['finisher'][-600:]
+    assert 'answer() must return 42' not in SEEN['review:a'], SEEN['review:a'][-600:]
+
     # the tool every agent is told to run must really judge their block, both ways
     verify = session_dir / 'a' / 'part' / 'verify.py'
     assert verify.exists(), 'no verify.py in the agent workspace'
@@ -152,13 +172,21 @@ def main():
         assert 'swarm-%s-agents' % run.adw_id not in left, 'agent container outlived the swarm'
 
     with closing(sqlite3.connect(db)) as con:
-        rows = con.execute('SELECT type, name, payload_json FROM events WHERE adw_id=?',
-                           (run.adw_id,)).fetchall()
+        rows = con.execute('SELECT type, name, payload_json FROM events WHERE adw_id=? '
+                           'ORDER BY rowid', (run.adw_id,)).fetchall()
         total, status = con.execute('SELECT total_tokens, status FROM sessions WHERE adw_id=?',
                                     (run.adw_id,)).fetchone()
     # losing agents is tolerated, so an accepted swarm must be recorded as a success
     assert status == 'success', 'accepted swarm recorded as %s' % status
     assert total == sum(SPENT.values()), 'trace undercounts failed agents: %s' % total
+    # posts are traced live, with their tags: the prototype's notes are in the trace before
+    # the parts are even assigned, not in one pass at the end of the run
+    posts = [json.loads(p) for t, _, p in rows if t == 'board_post']
+    assert len(posts) == 3 and {p['file']: p['mentions'] for p in posts} == {
+        'prototype--note-1.md': ['b'], 'prototype--note-2.md': ['a'], 'a--note-1.md': ['all']}, posts
+    assert all(p['thread'] == 'main' and p['posted_at'] and p['chars'] for p in posts), posts
+    kinds = [t for t, _, _ in rows]
+    assert kinds.index('board_post') < kinds.index('parts'), kinds
     payload = {(t, n): json.loads(p) for t, n, p in rows}
     assert payload[('parts', 'assignment')]['owners'] == ['a', 'b'], payload[('parts', 'assignment')]
     assert payload[('parts', 'assignment')]['reviewers'] == ['loser']
