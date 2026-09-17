@@ -18,3 +18,8 @@ skill/
 
 # distilled from local runs
 blueprints/*.json
+
+# the trailer: keep the poster and the video the README embeds, not the render tree
+brag-output/*
+!brag-output/brag.mp4
+!brag-output/brag.jpg
