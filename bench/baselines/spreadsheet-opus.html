@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spreadsheet</title>
+<style>
+:root { --bg:#f6f7f9; --panel:#fff; --line:#d5d9e0; --ink:#1c2026; --muted:#5d6675; --accent:#1f5fbf; --sel:#dbe7fb; --hot:#ffd9d9; --note:#fff3c4; font-family: "Segoe UI", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font-size:14px; }
+header { display:flex; align-items:center; gap:14px; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line); }
+header h1 { font-size:16px; margin:0; }
+nav { display:flex; flex-wrap:wrap; gap:4px; padding:8px 16px; background:var(--panel); border-bottom:1px solid var(--line); }
+nav button { border:1px solid var(--line); background:#fff; padding:4px 9px; border-radius:4px; cursor:pointer; font-size:13px; }
+nav button.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+main { padding:14px 16px; }
+.panel { display:none; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px; }
+.panel.active { display:block; }
+.panel h2 { font-size:15px; margin:0 0 10px; }
+.bar { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.bar .addr { min-width:52px; font-weight:600; font-family:Consolas, monospace; }
+#formula { flex:1; font-family:Consolas, monospace; padding:5px 8px; border:1px solid var(--line); border-radius:4px; }
+.scroll { overflow:auto; max-height:60vh; border:1px solid var(--line); }
+table.grid { border-collapse:collapse; font-family:Consolas, monospace; font-size:13px; }
+table.grid th, table.grid td { border:1px solid var(--line); padding:2px 6px; min-width:64px; height:24px; white-space:nowrap; }
+table.grid th { background:#eef0f4; color:var(--muted); font-weight:500; text-align:center; position:sticky; top:0; }
+table.grid th.rh { position:sticky; left:0; }
+table.grid td { cursor:cell; }
+table.grid td.selected { outline:2px solid var(--accent); outline-offset:-2px; background:var(--sel); }
+table.grid td.num { text-align:right; }
+table.grid td.left { text-align:left; } table.grid td.right { text-align:right; } table.grid td.center { text-align:center; }
+table.grid td.bold { font-weight:700; } table.grid td.italic { font-style:italic; }
+table.grid td.err { color:#b3261e; }
+table.grid td.hot { background:var(--hot); } table.grid td.note { background:var(--note); }
+table.grid td.warn { background:#ffe6c7; } table.grid td.good { background:#d9f5dc; }
+form.row, .row { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin-bottom:10px; }
+label { display:flex; flex-direction:column; gap:3px; font-size:12px; color:var(--muted); }
+input, select, textarea, button { font:inherit; }
+input, select, textarea { padding:4px 6px; border:1px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); }
+input[type=checkbox] { width:auto; }
+textarea { font-family:Consolas, monospace; min-width:260px; min-height:90px; }
+button.act { padding:5px 10px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:4px; cursor:pointer; }
+button.act:disabled { opacity:.5; cursor:default; }
+button.sub { padding:3px 8px; border:1px solid var(--line); background:#fff; border-radius:4px; cursor:pointer; }
+.msg { color:#b3261e; margin:4px 0; }
+.ok { color:#1f7a3a; margin:4px 0; }
+ul.list { margin:6px 0; padding-left:18px; } ul.list li { margin:2px 0; }
+table.kv { border-collapse:collapse; } table.kv td, table.kv th { border:1px solid var(--line); padding:3px 8px; text-align:left; }
+pre { background:#f0f2f5; padding:8px; border-radius:4px; overflow:auto; max-height:40vh; font-size:12px; }
+.muted { color:var(--muted); font-size:12px; }
+svg.chart { background:#fff; border:1px solid var(--line); }
+</style>
+</head>
+<body>
+<header><h1>Spreadsheet</h1><span class="muted" id="status">Click a cell, type in the formula bar, press Enter.</span></header>
+<nav id="tabs">
+<button data-tab="grid">Grid</button><button data-tab="parser">Parser</button><button data-tab="calc">Calc</button><button data-tab="functions">Functions</button><button data-tab="deps">Deps</button><button data-tab="errors">Errors</button><button data-tab="format">Format</button><button data-tab="history">History</button><button data-tab="rowscols">Rows &amp; columns</button><button data-tab="fill">Fill</button><button data-tab="find">Find</button><button data-tab="csv">CSV</button><button data-tab="chart">Chart</button><button data-tab="validation">Validation</button><button data-tab="names">Names</button><button data-tab="sheets">Sheets</button><button data-tab="conditional">Conditional</button><button data-tab="stats">Stats</button><button data-tab="persist">Persist</button><button data-tab="keys">Keys</button>
+</nav>
+<main>
+<section id="panel-grid" class="panel"></section><section id="panel-parser" class="panel"></section><section id="panel-calc" class="panel"></section><section id="panel-functions" class="panel"></section><section id="panel-deps" class="panel"></section><section id="panel-errors" class="panel"></section><section id="panel-format" class="panel"></section><section id="panel-history" class="panel"></section><section id="panel-rowscols" class="panel"></section><section id="panel-fill" class="panel"></section><section id="panel-find" class="panel"></section><section id="panel-csv" class="panel"></section><section id="panel-chart" class="panel"></section><section id="panel-validation" class="panel"></section><section id="panel-names" class="panel"></section><section id="panel-sheets" class="panel"></section><section id="panel-conditional" class="panel"></section><section id="panel-stats" class="panel"></section><section id="panel-persist" class="panel"></section><section id="panel-keys" class="panel"></section>
+</main>
+<script id="app">
+(function () {
+'use strict';
+const App = { features: {} };
+const FEATURES = ['grid', 'parser', 'calc', 'functions', 'deps', 'errors', 'format', 'history', 'rowscols', 'fill', 'find', 'csv', 'chart', 'validation', 'names', 'sheets', 'conditional', 'stats', 'persist', 'keys'];
+const ERROR_CODES = ['#DIV/0!', '#REF!', '#NAME?', '#VALUE!', '#CYCLE!', '#PARSE!'];
+const isErr = v => typeof v === 'string' && ERROR_CODES.includes(v);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+
+// ---------- store & router ----------
+let state = { sheets: [], active: null, names: {}, ui: { selected: 'A1', tab: 'grid' }, history: { past: [], future: [] } };
+const subs = [];
+App.store = {
+  get: () => state,
+  set: patch => { state = Object.assign({}, state, patch); subs.forEach(fn => fn(state)); },
+  subscribe: fn => { subs.push(fn); return () => subs.splice(subs.indexOf(fn), 1); },
+};
+App.router = {
+  show(name) {
+    const doc = App.doc; if (!doc) return;
+    doc.querySelectorAll('nav#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+    doc.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+    if (state.ui.tab !== name) App.store.set({ ui: Object.assign({}, state.ui, { tab: name }) });
+  },
+};
+
+// ---------- addresses ----------
+const ADDR = /^\$?([A-Za-z]+)\$?([1-9][0-9]*)$/;
+const colName = c => { let s = '', n = c + 1; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; };
+const colIndex = letters => { let n = 0; for (const ch of letters.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64); return n - 1; };
+const parseAddr = t => { const m = ADDR.exec(String(t == null ? '' : t).trim()); return m ? { col: colIndex(m[1]), row: Number(m[2]) - 1 } : null; };
+const toAddr = (c, r) => colName(c) + (r + 1);
+const norm = a => { const p = parseAddr(a); return p ? toAddr(p.col, p.row) : String(a || '').toUpperCase(); };
+const parseRange = t => {
+  const parts = String(t || '').split(':');
+  const a = parseAddr(parts[0]), b = parseAddr(parts[1] == null ? parts[0] : parts[1]);
+  if (!a || !b) return null;
+  return { c1: Math.min(a.col, b.col), r1: Math.min(a.row, b.row), c2: Math.max(a.col, b.col), r2: Math.max(a.row, b.row) };
+};
+const rangeAddrs = t => { const r = parseRange(t); if (!r) return []; const out = []; for (let row = r.r1; row <= r.r2; row++) for (let col = r.c1; col <= r.c2; col++) out.push(toAddr(col, row)); return out; };
+const addrOrder = (a, b) => { const p = parseAddr(a), q = parseAddr(b); return p.row - q.row || p.col - q.col; };
+const sheetByName = (book, name) => book.sheets.find(s => s.name.toLowerCase() === String(name).toLowerCase()) || null;
+const activeSheet = st => st.sheets.find(s => s.id === st.active) || st.sheets[0];
+
+// ---------- raw values & display ----------
+const NUM = /^-?\d+(\.\d+)?$/;
+const rawValue = raw => {
+  if (raw === '' || raw == null) return null;
+  if (raw[0] === "'") return raw.slice(1);
+  if (NUM.test(raw)) return Number(raw);
+  const low = raw.toLowerCase();
+  if (low === 'true') return true;
+  if (low === 'false') return false;
+  return raw;
+};
+const general = n => { if (!isFinite(n)) return String(n); const s = String(Number(n.toPrecision(12))); return s; };
+const thousands = s => { const [i, d] = s.split('.'); return i.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (d != null ? '.' + d : ''); };
+const roundHalfAway = (x, d) => { const sign = x < 0 ? -1 : 1; const v = Number(Math.round(Number(Math.abs(x) + 'e' + d)) + 'e-' + d); return sign * v; };
+const display = (value, fmt) => {
+  if (value == null) return '';
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+  if (typeof value !== 'number') return String(value);
+  const kind = (fmt && fmt.kind) || 'general';
+  const d = fmt && fmt.decimals != null ? Number(fmt.decimals) : (kind === 'percent' ? 0 : 2);
+  if (kind === 'general' || kind === 'text') return general(value);
+  if (kind === 'percent') return roundHalfAway(value * 100, d).toFixed(d) + '%';
+  const fixed = roundHalfAway(Math.abs(value), d).toFixed(d);
+  if (kind === 'currency') return (value < 0 ? '-' : '') + '$' + thousands(fixed);
+  return (value < 0 ? '-' : '') + thousands(fixed);
+};
+
+// ---------- reference rewriting (shared by rowscols and fill) ----------
+// Walks a formula, leaves strings alone, hands every reference to fn({sheet, c1,r1,$c1,$r1, c2...})
+// and splices back what fn returns ('#REF!' allowed).
+const REF = /(?:([A-Za-z_][A-Za-z0-9_]*)!)?(\$?)([A-Za-z]+)(\$?)([1-9][0-9]*)(?::(\$?)([A-Za-z]+)(\$?)([1-9][0-9]*))?/g;
+function rewriteRefs(raw, fn) {
+  if (!raw || raw[0] !== '=') return raw;
+  let out = '', i = 0;
+  const src = raw;
+  while (i < src.length) {
+    if (src[i] === '"') { let j = i + 1; while (j < src.length && src[j] !== '"') j++; out += src.slice(i, j + 1); i = j + 1; continue; }
+    let j = i; while (j < src.length && src[j] !== '"') j++;
+    const chunk = src.slice(i, j);
+    out += chunk.replace(REF, (m, sheet, dc1, c1, dr1, r1, dc2, c2, dr2, r2, offset, whole) => {
+      const after = whole[offset + m.length];
+      const before = whole[offset - 1];
+      if (after === '(' || (before && /[A-Za-z0-9_.]/.test(before))) return m;   // a function name, or part of a longer word
+      const ref = { sheet: sheet || null, c1: colIndex(c1), r1: Number(r1) - 1, ac1: dc1 === '$', ar1: dr1 === '$', range: c2 != null };
+      if (ref.range) { ref.c2 = colIndex(c2); ref.r2 = Number(r2) - 1; ref.ac2 = dc2 === '$'; ref.ar2 = dr2 === '$'; }
+      return fn(ref);
+    });
+    i = j;
+  }
+  return out;
+}
+const refText = r => {
+  const one = (ac, c, ar, row) => (ac ? '$' : '') + colName(c) + (ar ? '$' : '') + (row + 1);
+  return (r.sheet ? r.sheet + '!' : '') + one(r.ac1, r.c1, r.ar1, r.r1) + (r.range ? ':' + one(r.ac2, r.c2, r.ar2, r.r2) : '');
+};
+
+// ---------- feature: grid ----------
+App.features.grid = { model: {
+  toAddr, parseAddr, colName,
+  get: (sheet, addr) => { const c = sheet.cells[norm(addr)]; return c && c.raw != null ? c.raw : ''; },
+  set: (sheet, addr, raw) => { const cells = Object.assign({}, sheet.cells); const a = norm(addr); if (raw === '' || raw == null) delete cells[a]; else cells[a] = { raw: String(raw) }; return Object.assign({}, sheet, { cells }); },
+  range: rangeAddrs,
+  bounds: sheet => { let cols = 0, rows = 0; for (const a of Object.keys(sheet.cells)) { const p = parseAddr(a); if (!p) continue; cols = Math.max(cols, p.col + 1); rows = Math.max(rows, p.row + 1); } return { cols, rows }; },
+}, render: renderGrid };
+
+// ---------- feature: parser ----------
+function tokenize(src) {
+  const toks = []; let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === ' ' || ch === '\t') { i++; continue; }
+    if (ch === '"') { let j = i + 1, s = ''; while (j < src.length) { if (src[j] === '"') { if (src[j + 1] === '"') { s += '"'; j += 2; continue; } break; } s += src[j]; j++; } if (j >= src.length) throw new Error('unterminated string'); toks.push({ t: 'str', v: s }); i = j + 1; continue; }
+    if (/[0-9.]/.test(ch)) { const m = /^\d*\.?\d+(?:[eE][+-]?\d+)?|^\d+\.?/.exec(src.slice(i)); if (!m) throw new Error('bad number'); toks.push({ t: 'num', v: Number(m[0]) }); i += m[0].length; continue; }
+    if (/[A-Za-z_$]/.test(ch)) { const m = /^[$A-Za-z_][$A-Za-z0-9_.]*/.exec(src.slice(i)); toks.push({ t: 'id', v: m[0] }); i += m[0].length; continue; }
+    const two = src.slice(i, i + 2);
+    if (two === '<=' || two === '>=' || two === '<>') { toks.push({ t: 'op', v: two }); i += 2; continue; }
+    if ('+-*/^&=<>(),:!'.includes(ch)) { toks.push({ t: 'op', v: ch }); i++; continue; }
+    throw new Error('unexpected character ' + ch);
+  }
+  return toks;
+}
+function parseFormula(raw) {
+  const src = String(raw || '');
+  if (src[0] !== '=') throw new Error('not a formula');
+  const toks = tokenize(src.slice(1)); let p = 0;
+  const peek = () => toks[p]; const next = () => toks[p++];
+  const isOp = v => peek() && peek().t === 'op' && peek().v === v;
+  const expect = v => { if (!isOp(v)) throw new Error('expected ' + v); next(); };
+  const cellTok = tok => tok && tok.t === 'id' && ADDR.test(tok.v);
+  function primary() {
+    const tok = next(); if (!tok) throw new Error('unexpected end');
+    if (tok.t === 'num') return { type: 'num', value: tok.v };
+    if (tok.t === 'str') return { type: 'str', value: tok.v };
+    if (tok.t === 'op' && tok.v === '(') { const e = comparison(); expect(')'); return e; }
+    if (tok.t === 'id') {
+      const up = tok.v.toUpperCase();
+      if (isOp('(')) { next(); const args = []; if (!isOp(')')) { args.push(comparison()); while (isOp(',')) { next(); args.push(comparison()); } } expect(')'); return { type: 'call', name: up, args }; }
+      if (up === 'TRUE') return { type: 'bool', value: true };
+      if (up === 'FALSE') return { type: 'bool', value: false };
+      let sheet = null, id = tok;
+      if (isOp('!')) { next(); sheet = tok.v; id = next(); if (!cellTok(id)) throw new Error('bad reference after !'); }
+      if (cellTok(id)) {
+        const from = norm(id.v);
+        if (isOp(':')) { next(); const to = next(); if (!cellTok(to)) throw new Error('bad range'); return { type: 'range', sheet, from, to: norm(to.v) }; }
+        return { type: 'ref', sheet, addr: from };
+      }
+      if (sheet) throw new Error('bad reference');
+      return { type: 'name', name: tok.v };
+    }
+    throw new Error('unexpected ' + tok.v);
+  }
+  function power() { const base = primary(); if (isOp('^')) { next(); return { type: 'bin', op: '^', left: base, right: unary() }; } return base; }
+  function unary() { if (isOp('-')) { next(); return { type: 'un', op: '-', arg: unary() }; } if (isOp('+')) { next(); return unary(); } return power(); }
+  function mul() { let l = unary(); while (isOp('*') || isOp('/')) { const op = next().v; l = { type: 'bin', op, left: l, right: unary() }; } return l; }
+  function add() { let l = mul(); while (isOp('+') || isOp('-')) { const op = next().v; l = { type: 'bin', op, left: l, right: mul() }; } return l; }
+  function concat() { let l = add(); while (isOp('&')) { next(); l = { type: 'bin', op: '&', left: l, right: add() }; } return l; }
+  function comparison() { let l = concat(); while (['=', '<>', '<', '>', '<=', '>='].some(isOp)) { const op = next().v; l = { type: 'bin', op, left: l, right: concat() }; } return l; }
+  const ast = comparison();
+  if (p < toks.length) throw new Error('unexpected ' + toks[p].v);
+  return ast;
+}
+function walk(ast, fn) {
+  if (!ast || typeof ast !== 'object') return;
+  fn(ast);
+  if (ast.type === 'bin') { walk(ast.left, fn); walk(ast.right, fn); }
+  else if (ast.type === 'un') walk(ast.arg, fn);
+  else if (ast.type === 'call') ast.args.forEach(a => walk(a, fn));
+}
+App.features.parser = { model: {
+  isFormula: raw => typeof raw === 'string' && raw[0] === '=',
+  parse: raw => { try { return parseFormula(raw); } catch (e) { return { type: 'error', code: '#PARSE!', message: e.message }; } },
+  refs: ast => { const out = []; walk(ast, n => { if (n.type === 'ref') out.push((n.sheet ? n.sheet + '!' : '') + n.addr); if (n.type === 'range') out.push((n.sheet ? n.sheet + '!' : '') + n.from + ':' + n.to); }); return out; },
+}, render: renderParser };
+
+// ---------- feature: functions ----------
+const toNum = v => { if (v == null) return 0; if (typeof v === 'number') return v; if (typeof v === 'boolean') return v ? 1 : 0; if (typeof v === 'string' && NUM.test(v.trim())) return Number(v); return '#VALUE!'; };
+const truthy = v => v === true || (typeof v === 'number' && v !== 0) || (typeof v === 'string' && v.toLowerCase() === 'true');
+const flat = args => args.reduce((acc, a) => acc.concat(Array.isArray(a) ? a : [a]), []);
+const numsOf = args => flat(args).filter(v => typeof v === 'number');
+const str = v => v == null ? '' : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : typeof v === 'number' ? general(v) : String(v);
+const FN = {
+  SUM: a => numsOf(a).reduce((s, v) => s + v, 0),
+  AVERAGE: a => { const n = numsOf(a); return n.length ? n.reduce((s, v) => s + v, 0) / n.length : '#DIV/0!'; },
+  MIN: a => { const n = numsOf(a); return n.length ? Math.min.apply(null, n) : 0; },
+  MAX: a => { const n = numsOf(a); return n.length ? Math.max.apply(null, n) : 0; },
+  COUNT: a => numsOf(a).length,
+  COUNTA: a => flat(a).filter(v => v != null && v !== '').length,
+  IF: a => truthy(a[0]) ? (a.length > 1 ? a[1] : true) : (a.length > 2 ? a[2] : false),
+  AND: a => flat(a).every(truthy),
+  OR: a => flat(a).some(truthy),
+  NOT: a => !truthy(a[0]),
+  ROUND: a => { const x = toNum(a[0]), d = toNum(a[1] == null ? 0 : a[1]); if (isErr(x) || isErr(d)) return '#VALUE!'; return roundHalfAway(x, d); },
+  ABS: a => { const x = toNum(a[0]); return isErr(x) ? x : Math.abs(x); },
+  LEN: a => str(a[0]).length,
+  UPPER: a => str(a[0]).toUpperCase(),
+  LOWER: a => str(a[0]).toLowerCase(),
+  CONCAT: a => flat(a).map(str).join(''),
+  TRIM: a => str(a[0]).trim().replace(/\s+/g, ' '),
+  MOD: a => { const x = toNum(a[0]), y = toNum(a[1]); if (isErr(x) || isErr(y)) return '#VALUE!'; if (y === 0) return '#DIV/0!'; return x - y * Math.floor(x / y); },
+  SQRT: a => { const x = toNum(a[0]); if (isErr(x)) return x; return x < 0 ? '#VALUE!' : Math.sqrt(x); },
+  POWER: a => { const x = toNum(a[0]), y = toNum(a[1]); if (isErr(x) || isErr(y)) return '#VALUE!'; return Math.pow(x, y); },
+  INT: a => { const x = toNum(a[0]); return isErr(x) ? x : Math.floor(x); },
+};
+FN.AVG = FN.AVERAGE;
+const FN_DOC = { SUM: 'adds the numbers', AVERAGE: 'mean of the numbers', AVG: 'alias of AVERAGE', MIN: 'smallest number', MAX: 'largest number', COUNT: 'how many numbers', COUNTA: 'how many non-empty values', IF: 'IF(test, then, else)', AND: 'all true', OR: 'any true', NOT: 'the opposite', ROUND: 'ROUND(x, decimals), half away from zero', ABS: 'absolute value', LEN: 'length of the text', UPPER: 'upper case', LOWER: 'lower case', CONCAT: 'joins the texts', TRIM: 'strips surrounding spaces', MOD: 'MOD(x, y) remainder', SQRT: 'square root', POWER: 'POWER(x, y)', INT: 'rounds down to an integer' };
+function callFn(name, args) {
+  const up = String(name).toUpperCase();
+  const fn = FN[up]; if (!fn) return '#NAME?';
+  if (up === 'IF') { if (isErr(args[0])) return args[0]; const r = FN.IF(args); return r; }
+  const bad = flat(args).find(isErr); if (bad) return bad;
+  return fn(args);
+}
+App.features.functions = { model: { call: callFn, names: () => Object.keys(FN).sort() }, render: renderFunctions };
+
+// ---------- feature: calc ----------
+function resolveName(book, name) { const k = Object.keys(book.names || {}).find(n => n.toLowerCase() === String(name).toLowerCase()); return k == null ? null : book.names[k]; }
+function splitTarget(target) { const m = /^(?:([^!]+)!)?([A-Za-z$]+\d+)(?::([A-Za-z$]+\d+))?$/.exec(String(target || '').trim()); if (!m) return null; return { sheet: m[1] || null, from: norm(m[2]), to: m[3] ? norm(m[3]) : null }; }
+function compute(book) {
+  const values = {}, visiting = {}, out = {};
+  const keyOf = (sheet, addr) => sheet.name + '!' + addr;
+  function cellValue(sheet, addr) {
+    const key = keyOf(sheet, addr);
+    if (key in values) return values[key];
+    const cell = sheet.cells[addr];
+    if (!cell || cell.raw === '' || cell.raw == null) return null;
+    if (cell.raw[0] !== '=') { values[key] = rawValue(cell.raw); return values[key]; }
+    if (visiting[key]) return '#CYCLE!';
+    visiting[key] = true;
+    let v;
+    try { v = evalAst(parseFormula(cell.raw), sheet); } catch (e) { v = e.message === 'not a formula' ? '#VALUE!' : '#PARSE!'; }
+    visiting[key] = false;
+    values[key] = v;
+    return v;
+  }
+  function targetSheet(sheet, name) { return name ? sheetByName(book, name) : sheet; }
+  function rangeValues(sheet, name, from, to) { const t = targetSheet(sheet, name); if (!t) return '#REF!'; return rangeAddrs(from + ':' + to).map(a => cellValue(t, a)); }
+  function argValue(node, sheet) {
+    if (node.type === 'range') return rangeValues(sheet, node.sheet, node.from, node.to);
+    if (node.type === 'name') { const t = resolveName(book, node.name); if (t == null) return '#NAME?'; const s = splitTarget(t); if (!s) return '#REF!'; if (s.to) return rangeValues(sheet, s.sheet, s.from, s.to); }
+    return evalAst(node, sheet);
+  }
+  function evalAst(node, sheet) {
+    switch (node.type) {
+      case 'num': case 'str': case 'bool': return node.value;
+      case 'error': return node.code;
+      case 'ref': { const t = targetSheet(sheet, node.sheet); if (!t) return '#REF!'; return cellValue(t, node.addr); }
+      case 'range': return '#VALUE!';
+      case 'name': { const t = resolveName(book, node.name); if (t == null) return '#NAME?'; const s = splitTarget(t); if (!s) return '#REF!'; if (s.to) return '#VALUE!'; const ts = targetSheet(sheet, s.sheet); if (!ts) return '#REF!'; return cellValue(ts, s.from); }
+      case 'call': return callFn(node.name, node.args.map(a => argValue(a, sheet)));
+      case 'un': { const v = evalAst(node.arg, sheet); if (isErr(v)) return v; const n = toNum(v); return isErr(n) ? n : -n; }
+      case 'bin': {
+        const l = evalAst(node.left, sheet); if (isErr(l)) return l;
+        const r = evalAst(node.right, sheet); if (isErr(r)) return r;
+        const op = node.op;
+        if (op === '&') return str(l) + str(r);
+        if (['=', '<>', '<', '>', '<=', '>='].includes(op)) {
+          let a = l, b = r;
+          if (typeof a === 'number' || typeof b === 'number') { if (a == null) a = 0; if (b == null) b = 0; }
+          const both = typeof a === 'number' && typeof b === 'number';
+          if (!both) { a = str(a).toLowerCase(); b = str(b).toLowerCase(); }
+          switch (op) { case '=': return a === b; case '<>': return a !== b; case '<': return a < b; case '>': return a > b; case '<=': return a <= b; default: return a >= b; }
+        }
+        const a = toNum(l); if (isErr(a)) return a;
+        const b = toNum(r); if (isErr(b)) return b;
+        switch (op) { case '+': return a + b; case '-': return a - b; case '*': return a * b; case '/': return b === 0 ? '#DIV/0!' : a / b; case '^': return Math.pow(a, b); }
+        return '#VALUE!';
+      }
+    }
+    return '#VALUE!';
+  }
+  for (const sheet of book.sheets) {
+    out[sheet.id] = {};
+    for (const addr of Object.keys(sheet.cells)) if (sheet.cells[addr] && sheet.cells[addr].raw !== '') out[sheet.id][addr] = cellValue(sheet, addr);
+  }
+  return out;
+}
+App.features.calc = { model: { compute }, render: renderCalc };
+
+// ---------- feature: deps ----------
+function graphOf(book) {
+  const g = {};
+  const keyList = (sheetName, from, to) => (to ? rangeAddrs(from + ':' + to) : [from]).map(a => sheetName + '!' + a);
+  for (const sheet of book.sheets) for (const addr of Object.keys(sheet.cells)) {
+    const raw = sheet.cells[addr].raw; const key = sheet.name + '!' + addr; const deps = new Set();
+    if (raw && raw[0] === '=') {
+      let ast; try { ast = parseFormula(raw); } catch (e) { ast = null; }
+      walk(ast, n => {
+        if (n.type === 'ref' || n.type === 'range') { const t = n.sheet ? sheetByName(book, n.sheet) : sheet; if (t) keyList(t.name, n.type === 'ref' ? n.addr : n.from, n.type === 'range' ? n.to : null).forEach(k => deps.add(k)); }
+        if (n.type === 'name') { const tg = resolveName(book, n.name); const s = tg && splitTarget(tg); if (s) { const t = s.sheet ? sheetByName(book, s.sheet) : sheet; if (t) keyList(t.name, s.from, s.to).forEach(k => deps.add(k)); } }
+      });
+    }
+    g[key] = [...deps].sort((a, b) => { const [sa, aa] = a.split('!'), [sb, ab] = b.split('!'); return sa.localeCompare(sb) || addrOrder(aa, ab); });
+  }
+  return g;
+}
+function orderOf(graph) { const seen = new Set(), out = []; const visit = k => { if (seen.has(k)) return; seen.add(k); (graph[k] || []).forEach(visit); out.push(k); }; Object.keys(graph).forEach(visit); return out; }
+function cyclesOf(graph) {
+  const color = {}, onCycle = new Set(), stack = [];
+  const dfs = k => {
+    color[k] = 1; stack.push(k);
+    for (const d of graph[k] || []) {
+      if (!(d in graph)) continue;
+      if (color[d] === 1) { for (let i = stack.lastIndexOf(d); i < stack.length; i++) onCycle.add(stack[i]); }
+      else if (!color[d]) dfs(d);
+    }
+    stack.pop(); color[k] = 2;
+  };
+  Object.keys(graph).forEach(k => { if (!color[k]) dfs(k); });
+  // anything depending on a cycle member is not itself "on" the cycle; keep the strict members
+  return [...onCycle].sort();
+}
+function dependentsOf(graph, key) {
+  const rev = {}; for (const k of Object.keys(graph)) for (const d of graph[k]) (rev[d] = rev[d] || []).push(k);
+  const seen = new Set(); const queue = [key];
+  while (queue.length) { const k = queue.shift(); for (const d of rev[k] || []) if (!seen.has(d)) { seen.add(d); queue.push(d); } }
+  return [...seen].sort();
+}
+App.features.deps = { model: { graph: graphOf, order: orderOf, cycles: cyclesOf, dependents: dependentsOf }, render: renderDeps };
+
+// ---------- feature: errors ----------
+const ERROR_TEXT = { '#DIV/0!': 'The formula divides by zero or by an empty cell.', '#REF!': 'The formula points at a cell, sheet or range that does not exist any more.', '#NAME?': 'The formula uses a function or a name that is not defined.', '#VALUE!': 'An operand has the wrong type, for example text where a number is needed.', '#CYCLE!': 'The cell depends on itself, directly or through other cells.', '#PARSE!': 'The formula text could not be read; check the parentheses and operators.' };
+App.features.errors = { model: {
+  isError: isErr, codes: () => ERROR_CODES.slice(), describe: code => ERROR_TEXT[code] || '',
+  summary: values => { const out = {}; for (const v of Object.values(values || {})) if (isErr(v)) out[v] = (out[v] || 0) + 1; return out; },
+}, render: renderErrors };
+
+// ---------- feature: format ----------
+const DEFAULT_STYLE = { bold: false, italic: false, align: 'auto', format: { kind: 'general', decimals: null } };
+const styleOf = (sheet, addr) => { const s = (sheet.formats || {})[norm(addr)] || {}; return Object.assign({}, DEFAULT_STYLE, s, { format: Object.assign({}, DEFAULT_STYLE.format, s.format || {}) }); };
+App.features.format = { model: {
+  display, styleOf,
+  setStyle: (sheet, addrs, patch) => { const formats = Object.assign({}, sheet.formats || {}); for (const a of addrs) { const cur = formats[norm(a)] || {}; formats[norm(a)] = Object.assign({}, cur, patch, patch.format ? { format: Object.assign({}, cur.format || {}, patch.format) } : {}); } return Object.assign({}, sheet, { formats }); },
+}, render: renderFormat };
+
+// ---------- feature: history ----------
+const HISTORY_CAP = 50;
+App.features.history = { model: {
+  empty: () => ({ past: [], future: [] }),
+  push: (stack, st) => ({ past: stack.past.concat([st]).slice(-HISTORY_CAP), future: [] }),
+  undo: (stack, current) => stack.past.length ? { stack: { past: stack.past.slice(0, -1), future: [current].concat(stack.future) }, state: stack.past[stack.past.length - 1] } : { stack, state: current },
+  redo: (stack, current) => stack.future.length ? { stack: { past: stack.past.concat([current]).slice(-HISTORY_CAP), future: stack.future.slice(1) }, state: stack.future[0] } : { stack, state: current },
+  canUndo: stack => stack.past.length > 0, canRedo: stack => stack.future.length > 0, depth: stack => stack.past.length,
+}, render: renderHistory };
+
+// ---------- feature: rowscols ----------
+// mapRow(row) -> new row or -1 (deleted); the same for columns. Cells and refs move together.
+function remap(sheet, mapCol, mapRow) {
+  const move = obj => { const out = {}; for (const a of Object.keys(obj || {})) { const p = parseAddr(a); if (!p) continue; const c = mapCol(p.col), r = mapRow(p.row); if (c < 0 || r < 0) continue; out[toAddr(c, r)] = obj[a]; } return out; };
+  const cells = move(sheet.cells);
+  for (const a of Object.keys(cells)) cells[a] = { raw: rewriteRefs(cells[a].raw, ref => {
+    if (ref.sheet) return refText(ref);
+    if (!ref.range) { const c = mapCol(ref.c1), r = mapRow(ref.r1); return c < 0 || r < 0 ? '#REF!' : refText(Object.assign({}, ref, { c1: c, r1: r })); }
+    let c1 = mapCol(ref.c1), c2 = mapCol(ref.c2), r1 = mapRow(ref.r1), r2 = mapRow(ref.r2);
+    if (c1 < 0 && c2 < 0 && ref.c1 === ref.c2) return '#REF!';
+    if (r1 < 0 && r2 < 0 && ref.r1 === ref.r2) return '#REF!';
+    if (c1 < 0) c1 = mapCol(ref.c1 + 1) < 0 ? -1 : ref.c1;        // the next column moves into the deleted slot
+    if (c2 < 0) c2 = ref.c2 - 1;
+    if (r1 < 0) r1 = ref.r1;
+    if (r2 < 0) r2 = ref.r2 - 1;
+    if (c1 < 0 || r1 < 0 || c2 < c1 || r2 < r1) return '#REF!';
+    return refText(Object.assign({}, ref, { c1, c2, r1, r2 }));
+  }) };
+  return Object.assign({}, sheet, { cells, formats: move(sheet.formats), rules: move(sheet.rules) });
+}
+const same = x => x;
+App.features.rowscols = { model: {
+  insertRow: (sheet, row) => remap(sheet, same, r => r >= row - 1 ? r + 1 : r),
+  deleteRow: (sheet, row) => remap(sheet, same, r => r === row - 1 ? -1 : r > row - 1 ? r - 1 : r),
+  insertCol: (sheet, col) => remap(sheet, c => c >= col ? c + 1 : c, same),
+  deleteCol: (sheet, col) => remap(sheet, c => c === col ? -1 : c > col ? c - 1 : c, same),
+}, render: renderRowsCols };
+
+// ---------- feature: fill ----------
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+function shiftFormula(raw, dRow, dCol) {
+  return rewriteRefs(raw, ref => {
+    const c1 = ref.ac1 ? ref.c1 : ref.c1 + dCol, r1 = ref.ar1 ? ref.r1 : ref.r1 + dRow;
+    if (c1 < 0 || r1 < 0) return '#REF!';
+    if (!ref.range) return refText(Object.assign({}, ref, { c1, r1 }));
+    const c2 = ref.ac2 ? ref.c2 : ref.c2 + dCol, r2 = ref.ar2 ? ref.r2 : ref.r2 + dRow;
+    if (c2 < 0 || r2 < 0) return '#REF!';
+    return refText(Object.assign({}, ref, { c1, r1, c2, r2 }));
+  });
+}
+App.features.fill = { model: {
+  series: (seed, count) => {
+    const out = []; const last = seed[seed.length - 1], prev = seed[seed.length - 2];
+    if (NUM.test(last) && (prev == null || NUM.test(prev))) { const step = prev == null ? 1 : Number(last) - Number(prev); for (let i = 1; i <= count; i++) out.push(general(Number(last) + step * i)); }
+    else if (DATE.test(last)) { for (let i = 1; i <= count; i++) out.push(addDays(last, i)); }
+    else for (let i = 0; i < count; i++) out.push(last);
+    return out;
+  },
+  shiftFormula,
+  fillDown: (sheet, rangeText) => {
+    const r = parseRange(rangeText); if (!r) return sheet;
+    let s = sheet;
+    for (let col = r.c1; col <= r.c2; col++) { const src = App.features.grid.model.get(sheet, toAddr(col, r.r1)); for (let row = r.r1 + 1; row <= r.r2; row++) s = App.features.grid.model.set(s, toAddr(col, row), src[0] === '=' ? shiftFormula(src, row - r.r1, 0) : src); }
+    return s;
+  },
+}, render: renderFill };
+
+// ---------- feature: find ----------
+const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function findCells(sheet, query, opts) {
+  const o = opts || {}; const q = o.matchCase ? query : String(query).toLowerCase();
+  return Object.keys(sheet.cells).sort(addrOrder).filter(a => { const raw = sheet.cells[a].raw || ''; if (raw[0] === '=' && !o.inFormulas) return false; return q !== '' && (o.matchCase ? raw : raw.toLowerCase()).includes(q); }).map(a => ({ addr: a, raw: sheet.cells[a].raw }));
+}
+App.features.find = { model: {
+  find: findCells,
+  replace: (sheet, query, replacement, opts) => { const re = new RegExp(escapeRe(String(query)), 'g' + ((opts || {}).matchCase ? '' : 'i')); let s = sheet, count = 0; for (const h of findCells(sheet, query, opts)) { const next = h.raw.replace(re, replacement); if (next !== h.raw) { s = App.features.grid.model.set(s, h.addr, next); count++; } } return { sheet: s, count }; },
+}, render: renderFind };
+
+// ---------- feature: csv ----------
+const csvField = f => /[",\n\r]/.test(f) ? '"' + f.replace(/"/g, '""') + '"' : f;
+function parseCSV(text) {
+  const rows = []; let row = [], field = '', i = 0, quoted = false; const src = String(text || '');
+  if (src === '') return rows;
+  while (i < src.length) {
+    const ch = src[i];
+    if (quoted) { if (ch === '"') { if (src[i + 1] === '"') { field += '"'; i += 2; continue; } quoted = false; i++; continue; } field += ch; i++; continue; }
+    if (ch === '"') { quoted = true; i++; continue; }
+    if (ch === ',') { row.push(field); field = ''; i++; continue; }
+    if (ch === '\r') { i++; continue; }
+    if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+    field += ch; i++;
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+App.features.csv = { model: {
+  toCSV: rows => rows.map(r => r.map(f => csvField(String(f == null ? '' : f))).join(',')).join('\n'),
+  parse: parseCSV,
+  exportRange: (sheet, rangeText, values) => { const r = parseRange(rangeText); if (!r) return []; const out = []; for (let row = r.r1; row <= r.r2; row++) { const line = []; for (let col = r.c1; col <= r.c2; col++) line.push(display((values || {})[toAddr(col, row)], null)); out.push(line); } return out; },
+  paste: (sheet, addr, rows) => { const p = parseAddr(addr); if (!p) return sheet; let s = sheet; rows.forEach((line, dr) => line.forEach((f, dc) => { s = App.features.grid.model.set(s, toAddr(p.col + dc, p.row + dr), f); })); return s; },
+}, render: renderCsv };
+
+// ---------- feature: chart ----------
+App.features.chart = { model: {
+  series: (values, labelsRange, dataRange) => { const labels = rangeAddrs(labelsRange).map(a => display(values[a], null)); const data = rangeAddrs(dataRange).map(a => typeof values[a] === 'number' ? values[a] : 0); return { labels, data, max: data.length ? Math.max.apply(null, data) : 0 }; },
+  svg: (series, size) => {
+    const w = (size && size.width) || 320, h = (size && size.height) || 200, pad = 24, bottom = 28;
+    const n = series.data.length, plotH = h - pad - bottom, slot = n ? (w - pad * 2) / n : 0, barW = Math.max(4, slot * 0.6);
+    let s = '<svg class="chart" xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">';
+    s += '<line x1="' + pad + '" y1="' + (h - bottom) + '" x2="' + (w - pad) + '" y2="' + (h - bottom) + '" stroke="#999"/>';
+    series.data.forEach((v, i) => {
+      const bh = series.max > 0 ? Math.max(0, v) / series.max * plotH : 0; const x = pad + slot * i + (slot - barW) / 2; const y = h - bottom - bh;
+      s += '<rect x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + barW.toFixed(2) + '" height="' + bh.toFixed(2) + '" fill="#1f5fbf"><title>' + esc(series.labels[i] || '') + ': ' + v + '</title></rect>';
+      s += '<text x="' + (x + barW / 2).toFixed(2) + '" y="' + (h - bottom + 16) + '" font-size="11" text-anchor="middle" fill="#333">' + esc(series.labels[i] == null ? '' : series.labels[i]) + '</text>';
+      s += '<text x="' + (x + barW / 2).toFixed(2) + '" y="' + (y - 4).toFixed(2) + '" font-size="10" text-anchor="middle" fill="#333">' + general(v) + '</text>';
+    });
+    return s + '</svg>';
+  },
+}, render: renderChart };
+
+// ---------- feature: validation ----------
+const realDate = s => DATE.test(s) && new Date(s + 'T00:00:00Z').toISOString().slice(0, 10) === s;
+function checkRule(rule, raw) {
+  const errors = []; const r = rule || {}; const v = String(raw == null ? '' : raw);
+  if (r.kind === 'number') { if (!NUM.test(v.trim())) errors.push('"' + v + '" is not a number'); else { const n = Number(v); if (r.min != null && r.min !== '' && n < Number(r.min)) errors.push(n + ' is below the minimum ' + r.min); if (r.max != null && r.max !== '' && n > Number(r.max)) errors.push(n + ' is above the maximum ' + r.max); } }
+  else if (r.kind === 'list') { if (!(r.values || []).includes(v)) errors.push('"' + v + '" is not one of ' + (r.values || []).join(', ')); }
+  else if (r.kind === 'date') { if (!realDate(v)) errors.push('"' + v + '" is not a YYYY-MM-DD date'); }
+  return errors;
+}
+App.features.validation = { model: {
+  check: checkRule,
+  setRule: (sheet, addr, rule) => { const rules = Object.assign({}, sheet.rules || {}); if (rule) rules[norm(addr)] = rule; else delete rules[norm(addr)]; return Object.assign({}, sheet, { rules }); },
+  violations: sheet => Object.keys(sheet.rules || {}).sort(addrOrder).map(a => { const raw = App.features.grid.model.get(sheet, a); if (raw[0] === '=') return null; const errors = checkRule(sheet.rules[a], raw); return errors.length ? { addr: a, errors } : null; }).filter(Boolean),
+}, render: renderValidation };
+
+// ---------- feature: names ----------
+App.features.names = { model: {
+  validate: (name, book) => { const n = String(name == null ? '' : name).trim(); const errors = []; if (!n) errors.push('a name cannot be blank'); else { if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(n)) errors.push('a name holds letters, digits and underscores and starts with a letter'); if (parseAddr(n)) errors.push('"' + n + '" looks like a cell address'); if (resolveName(book, n) != null) errors.push('"' + n + '" is already defined'); } return errors; },
+  define: (book, name, target) => Object.assign({}, book, { names: Object.assign({}, book.names, { [name]: target }) }),
+  resolve: resolveName,
+  remove: (book, name) => { const names = Object.assign({}, book.names); for (const k of Object.keys(names)) if (k.toLowerCase() === String(name).toLowerCase()) delete names[k]; return Object.assign({}, book, { names }); },
+}, render: renderNames };
+
+// ---------- feature: sheets ----------
+App.features.sheets = { model: {
+  add: (book, name) => { let n = book.sheets.length + 1, id = 'sheet' + n; while (book.sheets.some(s => s.id === id)) id = 'sheet' + (++n); return Object.assign({}, book, { sheets: book.sheets.concat([{ id, name, cells: {}, formats: {}, rules: {}, conditional: [] }]) }); },
+  rename: (book, id, name) => Object.assign({}, book, { sheets: book.sheets.map(s => s.id === id ? Object.assign({}, s, { name }) : s) }),
+  remove: (book, id) => { if (book.sheets.length <= 1) return book; const sheets = book.sheets.filter(s => s.id !== id); return Object.assign({}, book, { sheets, active: sheets.some(s => s.id === book.active) ? book.active : sheets[0].id }); },
+  validate: (name, book) => { const n = String(name == null ? '' : name).trim(); const errors = []; if (!n) errors.push('a sheet name cannot be blank'); if (/[!:]/.test(n)) errors.push('a sheet name cannot hold ! or :'); if (n && sheetByName(book, n)) errors.push('"' + n + '" is already a sheet'); return errors; },
+  byName: sheetByName,
+}, render: renderSheets };
+
+// ---------- feature: conditional ----------
+function ruleMatches(rule, value) {
+  const k = rule.kind;
+  if (k === 'contains') return typeof value === 'string' && value.toLowerCase().includes(String(rule.value == null ? '' : rule.value).toLowerCase());
+  if (typeof value !== 'number') return false;
+  const a = Number(rule.value), b = Number(rule.value2);
+  if (k === 'gt') return value > a; if (k === 'lt') return value < a; if (k === 'eq') return value === a;
+  if (k === 'between') return value >= Math.min(a, b) && value <= Math.max(a, b);
+  return false;
+}
+App.features.conditional = { model: {
+  matches: ruleMatches,
+  addRule: (sheet, rule) => Object.assign({}, sheet, { conditional: (sheet.conditional || []).concat([rule]) }),
+  removeRule: (sheet, index) => Object.assign({}, sheet, { conditional: (sheet.conditional || []).filter((r, i) => i !== index) }),
+  classes: (sheet, values) => { const out = {}; for (const rule of sheet.conditional || []) for (const a of rangeAddrs(rule.range)) if (ruleMatches(rule, values[a])) (out[a] = out[a] || []).push(rule.cls); return out; },
+}, render: renderConditional };
+
+// ---------- feature: stats ----------
+App.features.stats = { model: {
+  summary: (values, rangeText) => { const vs = rangeAddrs(rangeText).map(a => values[a]); const nums = vs.filter(v => typeof v === 'number'); const sum = nums.reduce((s, v) => s + v, 0); return { count: nums.length, sum, avg: nums.length ? sum / nums.length : null, min: nums.length ? Math.min.apply(null, nums) : null, max: nums.length ? Math.max.apply(null, nums) : null, cells: vs.filter(v => v != null).length }; },
+}, render: renderStats };
+
+// ---------- feature: persist ----------
+const KEY = 'spreadsheet.book.v2';
+function migrate(doc) {
+  if (!doc || typeof doc !== 'object') return null;
+  if (doc.version === 2) return doc;
+  const cells = {}; for (const a of Object.keys(doc.cells || {})) cells[norm(a)] = { raw: String(doc.cells[a]) };
+  return { version: 2, sheets: [{ id: 'sheet1', name: 'Sheet1', cells, formats: {}, rules: {}, conditional: [] }], active: 'sheet1', names: {} };
+}
+App.features.persist = { model: {
+  KEY,
+  save: book => { localStorage.setItem(KEY, JSON.stringify({ version: 2, sheets: book.sheets, active: book.active, names: book.names || {} })); },
+  load: () => { const raw = localStorage.getItem(KEY); if (raw == null) return null; try { return migrate(JSON.parse(raw)); } catch (e) { return null; } },
+  migrate,
+  clear: () => localStorage.removeItem(KEY),
+}, render: renderPersist };
+
+// ---------- feature: keys ----------
+App.features.keys = { model: {
+  next: (addr, key, bounds) => {
+    const p = parseAddr(addr); if (!p) return addr; let { col, row } = p;
+    switch (key) { case 'ArrowUp': row--; break; case 'ArrowDown': case 'Enter': row++; break; case 'ArrowLeft': case 'Shift+Tab': col--; break; case 'ArrowRight': case 'Tab': col++; break; case 'Home': col = 0; break; case 'Ctrl+Home': col = 0; row = 0; break; default: return addr; }
+    const b = bounds || { cols: 26, rows: 100 };
+    col = Math.max(0, Math.min(b.cols - 1, col)); row = Math.max(0, Math.min(b.rows - 1, row));
+    return toAddr(col, row);
+  },
+  selection: (anchor, focus) => { const r = parseRange(anchor + ':' + focus); return r ? toAddr(r.c1, r.r1) + ':' + toAddr(r.c2, r.r2) : anchor; },
+  inRange: (addr, rangeText) => { const p = parseAddr(addr), r = parseRange(rangeText); return !!(p && r) && p.col >= r.c1 && p.col <= r.c2 && p.row >= r.r1 && p.row <= r.r2; },
+}, render: renderKeys };
+
+// ---------- commits: every board change goes through here ----------
+App.commit = function (nextBookPatch) {
+  const st = App.store.get();
+  const snapshot = { sheets: st.sheets, names: st.names, active: st.active };
+  const history = App.features.history.model.push(st.history, snapshot);
+  const next = Object.assign({}, nextBookPatch, { history });
+  App.store.set(next);
+  try { App.features.persist.model.save(App.store.get()); } catch (e) { /* storage may be unavailable */ }
+};
+App.commitSheet = function (sheet) { const st = App.store.get(); App.commit({ sheets: st.sheets.map(s => s.id === sheet.id ? sheet : s) }); };
+App.undo = function () { const st = App.store.get(); const r = App.features.history.model.undo(st.history, { sheets: st.sheets, names: st.names, active: st.active }); App.store.set(Object.assign({}, r.state, { history: r.stack })); try { App.features.persist.model.save(App.store.get()); } catch (e) {} };
+App.redo = function () { const st = App.store.get(); const r = App.features.history.model.redo(st.history, { sheets: st.sheets, names: st.names, active: st.active }); App.store.set(Object.assign({}, r.state, { history: r.stack })); try { App.features.persist.model.save(App.store.get()); } catch (e) {} };
+App.select = function (addr) { const st = App.store.get(); App.store.set({ ui: Object.assign({}, st.ui, { selected: norm(addr) }) }); };
+const values = st => { try { return compute(st); } catch (e) { return {}; } };
+const activeValues = st => (values(st)[activeSheet(st).id]) || {};
+const setUi = patch => { const st = App.store.get(); App.store.set({ ui: Object.assign({}, st.ui, patch) }); };
+
+// ---------- render helpers ----------
+const h = (root, html) => { root.innerHTML = html; return root; };
+const on = (root, selector, event, fn) => root.querySelectorAll(selector).forEach(el => el.addEventListener(event, fn));
+const val = (root, id) => { const el = root.querySelector('#' + id); return el ? el.value : ''; };
+const field = (id, label, extra) => '<label>' + esc(label) + '<input id="' + id + '" ' + (extra || '') + '></label>';
+const note = (ok, text) => text ? '<p class="' + (ok ? 'ok' : 'msg') + '">' + esc(text) + '</p>' : '';
+
+function renderGrid(root, st) {
+  const sheet = activeSheet(st); if (!sheet) { h(root, '<p>No sheet.</p>'); return; }
+  const vals = activeValues(st); const b = App.features.grid.model.bounds(sheet);
+  const cols = Math.max(b.cols + 2, 8), rows = Math.max(b.rows + 2, 20);
+  const sel = st.ui.selected || 'A1'; const classes = App.features.conditional.model.classes(sheet, vals);
+  let html = '<h2>' + esc(sheet.name) + '</h2><div class="bar"><span class="addr" id="cur">' + esc(sel) + '</span><input id="formula" placeholder="=A1+A2" value="' + esc(App.features.grid.model.get(sheet, sel)) + '" autocomplete="off"> <span class="muted">Enter sets the cell, Esc cancels</span></div><div class="scroll"><table class="grid"><thead><tr><th class="rh"></th>';
+  for (let c = 0; c < cols; c++) html += '<th>' + colName(c) + '</th>';
+  html += '</tr></thead><tbody>';
+  for (let r = 0; r < rows; r++) {
+    html += '<tr><th class="rh">' + (r + 1) + '</th>';
+    for (let c = 0; c < cols; c++) {
+      const a = toAddr(c, r); const v = vals[a]; const style = styleOf(sheet, a);
+      const cls = [a === sel ? 'selected' : '', typeof v === 'number' && style.align === 'auto' ? 'num' : '', style.align !== 'auto' ? style.align : '', style.bold ? 'bold' : '', style.italic ? 'italic' : '', isErr(v) ? 'err' : ''].concat(classes[a] || []).filter(Boolean).join(' ');
+      html += '<td data-addr="' + a + '" tabindex="0" class="' + cls + '" title="' + esc(App.features.grid.model.get(sheet, a)) + '">' + esc(display(v, style.format)) + '</td>';
+    }
+    html += '</tr>';
+  }
+  h(root, html + '</tbody></table></div>');
+  const bar = root.querySelector('#formula');
+  const commitBar = () => { const cur = App.store.get(); const s = activeSheet(cur); const a = cur.ui.selected || 'A1'; if (App.features.grid.model.get(s, a) !== bar.value) App.commitSheet(App.features.grid.model.set(s, a, bar.value)); };
+  bar.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commitBar(); } else if (e.key === 'Escape') { bar.value = App.features.grid.model.get(activeSheet(App.store.get()), App.store.get().ui.selected || 'A1'); } });
+  const table = root.querySelector('table.grid');
+  table.addEventListener('click', e => { const td = e.target.closest('td[data-addr]'); if (td) App.select(td.dataset.addr); });
+  table.addEventListener('dblclick', e => { const td = e.target.closest('td[data-addr]'); if (td) { App.select(td.dataset.addr); const f = root.querySelector('#formula'); if (f) f.focus(); } });
+  table.addEventListener('keydown', e => {
+    const cur = App.store.get(); const s = activeSheet(cur); const bb = App.features.grid.model.bounds(s);
+    const bounds = { cols: Math.max(bb.cols + 2, cols), rows: Math.max(bb.rows + 2, rows) };
+    let key = e.key; if (key === 'Tab' && e.shiftKey) key = 'Shift+Tab'; if (key === 'Home' && e.ctrlKey) key = 'Ctrl+Home';
+    const from = cur.ui.selected || 'A1'; const to = App.features.keys.model.next(from, key, bounds);
+    if (to !== from) { e.preventDefault(); App.select(to); const td = root.querySelector('td[data-addr="' + to + '"]'); if (td) td.focus(); return; }
+    if (key === 'Delete' || key === 'Backspace') { e.preventDefault(); if (App.features.grid.model.get(s, from) !== '') App.commitSheet(App.features.grid.model.set(s, from, '')); }
+    else if (key.length === 1 && !e.ctrlKey && !e.metaKey) { const f = root.querySelector('#formula'); if (f) { f.value = key; f.focus(); e.preventDefault(); } }
+  });
+}
+function renderParser(root, st) {
+  const src = st.ui.parserInput == null ? '=SUM(A1:B2, 3) + Sheet2!A1 * 2' : st.ui.parserInput;
+  const ast = App.features.parser.model.parse(src);
+  h(root, '<h2>Parser</h2><div class="row">' + field('parser-in', 'Formula', 'value="' + esc(src) + '" size="40"') + '<button class="act" id="parser-go">Parse</button></div><p class="muted">References: ' + esc(App.features.parser.model.refs(ast).join(', ') || 'none') + '</p><pre>' + esc(JSON.stringify(ast, null, 1)) + '</pre>');
+  root.querySelector('#parser-go').addEventListener('click', () => setUi({ parserInput: val(root, 'parser-in') }));
+  root.querySelector('#parser-in').addEventListener('keydown', e => { if (e.key === 'Enter') setUi({ parserInput: val(root, 'parser-in') }); });
+}
+function renderCalc(root, st) {
+  const sheet = activeSheet(st); const vals = activeValues(st); const addrs = Object.keys(vals).sort(addrOrder);
+  h(root, '<h2>Calc: ' + esc(sheet ? sheet.name : '') + '</h2><p class="muted">' + addrs.length + ' non-empty cells, recomputed from their raw text on every change.</p><table class="kv"><tr><th>Cell</th><th>Raw</th><th>Value</th></tr>' + addrs.map(a => '<tr><td>' + a + '</td><td>' + esc(App.features.grid.model.get(sheet, a)) + '</td><td>' + esc(display(vals[a], null)) + '</td></tr>').join('') + '</table>');
+}
+function renderFunctions(root, st) {
+  const names = App.features.functions.model.names();
+  const tryIn = st.ui.fnTry == null ? '=ROUND(AVERAGE(1, 2, 4), 1)' : st.ui.fnTry;
+  let result = ''; try { const tmp = { sheets: [{ id: 't', name: 'T', cells: { A1: { raw: tryIn } }, formats: {}, rules: {}, conditional: [] }], active: 't', names: st.names || {} }; result = display(compute(tmp).t.A1, null); } catch (e) { result = '#PARSE!'; }
+  h(root, '<h2>Functions</h2><div class="row">' + field('fn-try', 'Try a formula', 'value="' + esc(tryIn) + '" size="36"') + '<button class="act" id="fn-go">Evaluate</button><span>= <b>' + esc(result) + '</b></span></div><ul class="list">' + names.map(n => '<li><b>' + n + '</b> <span class="muted">' + esc(FN_DOC[n] || '') + '</span></li>').join('') + '</ul>');
+  root.querySelector('#fn-go').addEventListener('click', () => setUi({ fnTry: val(root, 'fn-try') }));
+}
+function renderDeps(root, st) {
+  const g = App.features.deps.model.graph(st); const sheet = activeSheet(st); const key = sheet ? sheet.name + '!' + (st.ui.selected || 'A1') : '';
+  const cycles = App.features.deps.model.cycles(g);
+  h(root, '<h2>Dependencies of ' + esc(key) + '</h2><p>Reads: ' + esc((g[key] || []).join(', ') || 'nothing') + '</p><p>Read by: ' + esc(App.features.deps.model.dependents(g, key).join(', ') || 'nothing') + '</p><p>Cycles: ' + (cycles.length ? '<span class="msg">' + esc(cycles.join(', ')) + '</span>' : 'none') + '</p><p class="muted">Evaluation order: ' + esc(App.features.deps.model.order(g).join(' > ')) + '</p>');
+}
+function renderErrors(root, st) {
+  const summary = App.features.errors.model.summary(activeValues(st));
+  h(root, '<h2>Errors</h2><table class="kv"><tr><th>Code</th><th>Meaning</th><th>On this sheet</th></tr>' + App.features.errors.model.codes().map(c => '<tr><td>' + esc(c) + '</td><td>' + esc(App.features.errors.model.describe(c)) + '</td><td>' + (summary[c] || 0) + '</td></tr>').join('') + '</table>');
+}
+function renderFormat(root, st) {
+  const sheet = activeSheet(st); const sel = st.ui.selected || 'A1'; const cur = styleOf(sheet, sel);
+  const opt = (v, cur) => '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + v + '</option>';
+  h(root, '<h2>Format</h2><form class="row" id="fmt">' + field('fmt-cell', 'Cell or range', 'value="' + esc(sel) + '"') + '<label>Kind<select id="fmt-kind">' + ['general', 'number', 'percent', 'currency', 'text'].map(k => opt(k, cur.format.kind)).join('') + '</select></label>' + field('fmt-dec', 'Decimals', 'type="number" min="0" max="10" value="' + (cur.format.decimals == null ? '' : cur.format.decimals) + '"') + '<label>Align<select id="fmt-align">' + ['auto', 'left', 'center', 'right'].map(k => opt(k, cur.align)).join('') + '</select></label><label>Bold<input type="checkbox" id="fmt-bold"' + (cur.bold ? ' checked' : '') + '></label><label>Italic<input type="checkbox" id="fmt-italic"' + (cur.italic ? ' checked' : '') + '></label><button class="act" type="submit">Apply</button></form><p class="muted">Current style of ' + esc(sel) + ': ' + esc(JSON.stringify(cur)) + '</p>' + note(false, st.ui.formatMsg));
+  root.querySelector('#fmt').addEventListener('submit', e => {
+    e.preventDefault(); const s = activeSheet(App.store.get()); const addrs = rangeAddrs(val(root, 'fmt-cell'));
+    if (!addrs.length) { setUi({ formatMsg: 'Give a cell or a range like B2 or A1:B3.' }); return; }
+    const dec = val(root, 'fmt-dec');
+    App.commitSheet(App.features.format.model.setStyle(s, addrs, { bold: root.querySelector('#fmt-bold').checked, italic: root.querySelector('#fmt-italic').checked, align: val(root, 'fmt-align'), format: { kind: val(root, 'fmt-kind'), decimals: dec === '' ? null : Number(dec) } }));
+    setUi({ formatMsg: '' });
+  });
+}
+function renderHistory(root, st) {
+  const m = App.features.history.model;
+  h(root, '<h2>History</h2><div class="row"><button class="act" id="undo"' + (m.canUndo(st.history) ? '' : ' disabled') + '>Undo</button><button class="act" id="redo"' + (m.canRedo(st.history) ? '' : ' disabled') + '>Redo</button></div><p>' + m.depth(st.history) + ' change' + (m.depth(st.history) === 1 ? '' : 's') + ' to undo, ' + st.history.future.length + ' to redo. Fifty steps are kept. Ctrl+Z and Ctrl+Y work on the grid.</p>');
+  root.querySelector('#undo').addEventListener('click', App.undo);
+  root.querySelector('#redo').addEventListener('click', App.redo);
+}
+function renderRowsCols(root, st) {
+  const sel = parseAddr(st.ui.selected || 'A1') || { col: 0, row: 0 };
+  h(root, '<h2>Rows &amp; columns</h2><div class="row">' + field('rc-row', 'Row number', 'type="number" min="1" value="' + (sel.row + 1) + '"') + '<button class="act" id="rc-insrow">Insert row</button><button class="act" id="rc-delrow">Delete row</button></div><div class="row">' + field('rc-col', 'Column letter', 'value="' + colName(sel.col) + '"') + '<button class="act" id="rc-inscol">Insert column</button><button class="act" id="rc-delcol">Delete column</button></div><p class="muted">Formulas on this sheet follow the moved cells; a reference to a deleted cell becomes #REF!.</p>');
+  const m = App.features.rowscols.model;
+  const row = () => Math.max(1, Number(val(root, 'rc-row')) || 1);
+  const col = () => { const c = colIndex(val(root, 'rc-col').trim() || 'A'); return c < 0 ? 0 : c; };
+  root.querySelector('#rc-insrow').addEventListener('click', () => App.commitSheet(m.insertRow(activeSheet(App.store.get()), row())));
+  root.querySelector('#rc-delrow').addEventListener('click', () => App.commitSheet(m.deleteRow(activeSheet(App.store.get()), row())));
+  root.querySelector('#rc-inscol').addEventListener('click', () => App.commitSheet(m.insertCol(activeSheet(App.store.get()), col())));
+  root.querySelector('#rc-delcol').addEventListener('click', () => App.commitSheet(m.deleteCol(activeSheet(App.store.get()), col())));
+}
+function renderFill(root, st) {
+  const seed = st.ui.fillSeed == null ? '1, 3' : st.ui.fillSeed;
+  const preview = App.features.fill.model.series(seed.split(',').map(s => s.trim()).filter(Boolean), 5);
+  h(root, '<h2>Fill</h2><div class="row">' + field('fill-range', 'Range to fill down (first row is the source)', 'value="' + esc(st.ui.fillRange || (st.ui.selected || 'A1') + ':' + (st.ui.selected || 'A1')) + '"') + '<button class="act" id="fill-go">Fill down</button></div><div class="row">' + field('fill-seed', 'Series seed, comma separated', 'value="' + esc(seed) + '"') + '<button class="act" id="fill-prev">Preview</button><span>continues: ' + esc(preview.join(', ')) + '</span></div>' + note(false, st.ui.fillMsg));
+  root.querySelector('#fill-go').addEventListener('click', () => { const r = val(root, 'fill-range'); if (!parseRange(r)) { setUi({ fillMsg: 'Give a range like A2:A6.' }); return; } App.commitSheet(App.features.fill.model.fillDown(activeSheet(App.store.get()), r)); setUi({ fillRange: r, fillMsg: '' }); });
+  root.querySelector('#fill-prev').addEventListener('click', () => setUi({ fillSeed: val(root, 'fill-seed') }));
+}
+function renderFind(root, st) {
+  const sheet = activeSheet(st); const q = st.ui.findQuery || ''; const opts = { matchCase: !!st.ui.findCase, inFormulas: !!st.ui.findFormulas };
+  const hits = q ? App.features.find.model.find(sheet, q, opts) : [];
+  h(root, '<h2>Find &amp; replace</h2><form class="row" id="find-form">' + field('find-q', 'Find', 'value="' + esc(q) + '"') + '<label>Match case<input type="checkbox" id="find-case"' + (opts.matchCase ? ' checked' : '') + '></label><label>In formulas<input type="checkbox" id="find-formulas"' + (opts.inFormulas ? ' checked' : '') + '></label><button class="act" type="submit">Find</button></form><div class="row">' + field('find-rep', 'Replace with', 'value="' + esc(st.ui.findRep || '') + '"') + '<button class="act" id="find-replace">Replace all</button></div>' + (q ? '<p>' + hits.length + ' cell' + (hits.length === 1 ? '' : 's') + ' hold "' + esc(q) + '"' + (hits.length ? ': ' + hits.map(x => '<button class="sub" data-go="' + x.addr + '">' + x.addr + '</button> ' + esc(x.raw)).join(', ') : '') + '</p>' : '') + note(true, st.ui.findMsg));
+  root.querySelector('#find-form').addEventListener('submit', e => { e.preventDefault(); setUi({ findQuery: val(root, 'find-q'), findCase: root.querySelector('#find-case').checked, findFormulas: root.querySelector('#find-formulas').checked, findMsg: '' }); });
+  root.querySelector('#find-replace').addEventListener('click', () => { const query = val(root, 'find-q'); const r = App.features.find.model.replace(activeSheet(App.store.get()), query, val(root, 'find-rep'), { matchCase: root.querySelector('#find-case').checked, inFormulas: root.querySelector('#find-formulas').checked }); if (r.count) App.commitSheet(r.sheet); setUi({ findQuery: query, findRep: val(root, 'find-rep'), findMsg: r.count + ' cell' + (r.count === 1 ? '' : 's') + ' changed' }); });
+  on(root, 'button[data-go]', 'click', e => { App.select(e.target.dataset.go); App.router.show('grid'); });
+}
+function renderCsv(root, st) {
+  const sheet = activeSheet(st); const m = App.features.csv.model;
+  const range = st.ui.csvRange || 'A1:' + toAddr(Math.max(0, App.features.grid.model.bounds(sheet).cols - 1), Math.max(0, App.features.grid.model.bounds(sheet).rows - 1));
+  const exported = st.ui.csvOut == null ? '' : st.ui.csvOut;
+  h(root, '<h2>CSV</h2><div class="row">' + field('csv-range', 'Export range', 'value="' + esc(range) + '"') + '<button class="act" id="csv-export">Export</button></div><label>Exported CSV<textarea id="csv-out" readonly>' + esc(exported) + '</textarea></label><div class="row" style="margin-top:12px"><label>CSV to import<textarea id="csv-in" placeholder="a,b&#10;1,2">' + esc(st.ui.csvIn || '') + '</textarea></label>' + field('csv-at', 'Paste at cell', 'value="' + esc(st.ui.csvAt || (st.ui.selected || 'A1')) + '"') + '<button class="act" id="csv-import">Import</button></div>' + note(true, st.ui.csvMsg));
+  root.querySelector('#csv-export').addEventListener('click', () => { const cur = App.store.get(); const s = activeSheet(cur); const r = val(root, 'csv-range'); setUi({ csvRange: r, csvOut: m.toCSV(m.exportRange(s, r, activeValues(cur))) }); });
+  root.querySelector('#csv-import').addEventListener('click', () => { const rows = m.parse(val(root, 'csv-in')); const at = val(root, 'csv-at'); if (!parseAddr(at)) { setUi({ csvMsg: 'Give a cell like F1.' }); return; } App.commitSheet(m.paste(activeSheet(App.store.get()), at, rows)); setUi({ csvIn: val(root, 'csv-in'), csvAt: at, csvMsg: rows.length + ' row' + (rows.length === 1 ? '' : 's') + ' imported at ' + norm(at) }); });
+}
+function renderChart(root, st) {
+  const labels = st.ui.chartLabels || 'D1:D3', data = st.ui.chartData || 'E1:E3';
+  const s = App.features.chart.model.series(activeValues(st), labels, data);
+  h(root, '<h2>Chart</h2><form class="row" id="chart-form">' + field('chart-labels', 'Label range', 'value="' + esc(labels) + '"') + field('chart-data', 'Data range', 'value="' + esc(data) + '"') + '<button class="act" type="submit">Draw</button></form>' + (s.data.length ? App.features.chart.model.svg(s, { width: 420, height: 220 }) : '<p class="muted">Give two ranges of the same length.</p>'));
+  root.querySelector('#chart-form').addEventListener('submit', e => { e.preventDefault(); setUi({ chartLabels: val(root, 'chart-labels'), chartData: val(root, 'chart-data') }); });
+}
+function renderValidation(root, st) {
+  const sheet = activeSheet(st); const m = App.features.validation.model; const v = m.violations(sheet);
+  const rules = Object.keys(sheet.rules || {}).sort(addrOrder);
+  h(root, '<h2>Validation</h2><form class="row" id="val-form">' + field('val-cell', 'Cell', 'value="' + esc(st.ui.selected || 'A1') + '"') + '<label>Rule<select id="val-kind"><option value="number">number in a range</option><option value="list">one of a list</option><option value="date">a date</option></select></label>' + field('val-min', 'Min', 'type="number"') + field('val-max', 'Max', 'type="number"') + field('val-list', 'Allowed values, comma separated', '') + '<button class="act" type="submit">Add rule</button></form><p>' + (v.length ? '<span class="msg">' + v.length + ' violation' + (v.length === 1 ? '' : 's') + ':</span></p><ul class="list">' + v.map(x => '<li><b>' + x.addr + '</b> ' + esc(x.errors.join('; ')) + '</li>').join('') + '</ul>' : 'No violation.</p>') + '<p class="muted">Rules: ' + (rules.length ? rules.map(a => a + ' (' + sheet.rules[a].kind + ') <button class="sub" data-drop="' + a + '">remove</button>').join(', ') : 'none') + '</p>');
+  root.querySelector('#val-form').addEventListener('submit', e => {
+    e.preventDefault(); const kind = val(root, 'val-kind'); const addr = val(root, 'val-cell'); if (!parseAddr(addr)) return;
+    const rule = kind === 'number' ? { kind, min: val(root, 'val-min') === '' ? null : Number(val(root, 'val-min')), max: val(root, 'val-max') === '' ? null : Number(val(root, 'val-max')) } : kind === 'list' ? { kind, values: val(root, 'val-list').split(',').map(s => s.trim()).filter(Boolean) } : { kind };
+    App.commitSheet(m.setRule(activeSheet(App.store.get()), addr, rule));
+  });
+  on(root, 'button[data-drop]', 'click', e => App.commitSheet(m.setRule(activeSheet(App.store.get()), e.target.dataset.drop, null)));
+}
+function renderNames(root, st) {
+  const m = App.features.names.model; const names = Object.keys(st.names || {}).sort();
+  h(root, '<h2>Names</h2><form class="row" id="names-form">' + field('name-name', 'Name', 'placeholder="total"') + field('name-target', 'Refers to', 'placeholder="Sheet1!A1:A2" value="' + esc(activeSheet(st).name + '!' + (st.ui.selected || 'A1')) + '"') + '<button class="act" type="submit">Define</button></form>' + note(false, st.ui.namesMsg) + (names.length ? '<table class="kv"><tr><th>Name</th><th>Refers to</th><th></th></tr>' + names.map(n => '<tr><td>' + esc(n) + '</td><td>' + esc(st.names[n]) + '</td><td><button class="sub" data-drop="' + esc(n) + '">remove</button></td></tr>').join('') + '</table>' : '<p class="muted">No name yet. A name can be used in formulas: =SUM(total).</p>'));
+  root.querySelector('#names-form').addEventListener('submit', e => {
+    e.preventDefault(); const cur = App.store.get(); const name = val(root, 'name-name').trim(), target = val(root, 'name-target').trim();
+    const errors = m.validate(name, cur); if (!splitTarget(target)) errors.push('the target must be a cell or a range like Sheet1!A1:B2');
+    if (errors.length) { setUi({ namesMsg: errors.join('; ') }); return; }
+    App.commit({ names: m.define(cur, name, target).names }); setUi({ namesMsg: '' });
+  });
+  on(root, 'button[data-drop]', 'click', e => App.commit({ names: m.remove(App.store.get(), e.target.dataset.drop).names }));
+}
+function renderSheets(root, st) {
+  const m = App.features.sheets.model;
+  h(root, '<h2>Sheets</h2><form class="row" id="sheets-form">' + field('sheet-name', 'New sheet name', 'placeholder="Data"') + '<button class="act" type="submit">Add sheet</button></form>' + note(false, st.ui.sheetsMsg) + '<table class="kv"><tr><th>Sheet</th><th>Cells</th><th></th></tr>' + st.sheets.map(s => '<tr><td>' + (s.id === st.active ? '<b>' + esc(s.name) + '</b>' : esc(s.name)) + '</td><td>' + Object.keys(s.cells).length + '</td><td><button class="sub" data-switch="' + s.id + '">' + esc(s.name) + '</button> <button class="sub" data-rename="' + s.id + '">rename</button> <button class="sub" data-remove="' + s.id + '"' + (st.sheets.length < 2 ? ' disabled' : '') + '>remove</button></td></tr>').join('') + '</table>');
+  root.querySelector('#sheets-form').addEventListener('submit', e => { e.preventDefault(); const cur = App.store.get(); const name = val(root, 'sheet-name').trim(); const errors = m.validate(name, cur); if (errors.length) { setUi({ sheetsMsg: errors.join('; ') }); return; } const next = m.add(cur, name); App.commit({ sheets: next.sheets }); setUi({ sheetsMsg: '' }); });
+  on(root, 'button[data-switch]', 'click', e => { App.store.set({ active: e.target.dataset.switch, ui: Object.assign({}, App.store.get().ui, { selected: 'A1' }) }); });
+  on(root, 'button[data-rename]', 'click', e => { const cur = App.store.get(); const s = cur.sheets.find(x => x.id === e.target.dataset.rename); const name = prompt('New name for ' + s.name, s.name); if (name == null) return; const errors = m.validate(name, cur); if (errors.length) { setUi({ sheetsMsg: errors.join('; ') }); return; } App.commit({ sheets: m.rename(cur, s.id, name.trim()).sheets }); });
+  on(root, 'button[data-remove]', 'click', e => { const cur = App.store.get(); const next = m.remove(cur, e.target.dataset.remove); App.commit({ sheets: next.sheets, active: next.active }); });
+}
+function renderConditional(root, st) {
+  const sheet = activeSheet(st); const m = App.features.conditional.model; const rules = sheet.conditional || [];
+  h(root, '<h2>Conditional formatting</h2><form class="row" id="cond-form">' + field('cond-range', 'Range', 'value="A1:A10"') + '<label>Rule<select id="cond-kind"><option value="gt">greater than</option><option value="lt">less than</option><option value="between">between</option><option value="eq">equal to</option><option value="contains">contains text</option></select></label>' + field('cond-value', 'Value', '') + field('cond-value2', 'and (for between)', '') + '<label>Class<select id="cond-cls"><option value="hot">hot (red)</option><option value="note">note (yellow)</option><option value="warn">warn (orange)</option><option value="good">good (green)</option></select></label><button class="act" type="submit">Add rule</button></form>' + note(false, st.ui.condMsg) + (rules.length ? '<ul class="list">' + rules.map((r, i) => '<li>' + esc(r.range) + ': ' + esc(r.kind) + ' ' + esc(String(r.value == null ? '' : r.value)) + (r.kind === 'between' ? ' and ' + esc(String(r.value2)) : '') + ' -> <span class="' + esc(r.cls) + '">' + esc(r.cls) + '</span> <button class="sub" data-drop="' + i + '">remove</button></li>').join('') + '</ul>' : '<p class="muted">No rule on this sheet.</p>'));
+  root.querySelector('#cond-form').addEventListener('submit', e => {
+    e.preventDefault(); const range = val(root, 'cond-range'); if (!parseRange(range)) { setUi({ condMsg: 'Give a range like A1:A10.' }); return; }
+    const kind = val(root, 'cond-kind'); const v = val(root, 'cond-value');
+    App.commitSheet(m.addRule(activeSheet(App.store.get()), { range: range.toUpperCase(), kind, value: kind === 'contains' ? v : Number(v), value2: Number(val(root, 'cond-value2')), cls: val(root, 'cond-cls') })); setUi({ condMsg: '' });
+  });
+  on(root, 'button[data-drop]', 'click', e => App.commitSheet(m.removeRule(activeSheet(App.store.get()), Number(e.target.dataset.drop))));
+}
+function renderStats(root, st) {
+  const range = st.ui.statsRange || 'A1:A5'; const s = App.features.stats.model.summary(activeValues(st), range);
+  const f = v => v == null ? '-' : general(v);
+  h(root, '<h2>Stats</h2><form class="row" id="stats-form">' + field('stats-range', 'Range', 'value="' + esc(range) + '"') + '<button class="act" type="submit">Compute</button></form><table class="kv"><tr><th>Cells</th><th>Numbers</th><th>Sum</th><th>Average</th><th>Min</th><th>Max</th></tr><tr><td>' + s.cells + '</td><td>' + s.count + '</td><td>' + f(s.sum) + '</td><td>' + f(s.avg) + '</td><td>' + f(s.min) + '</td><td>' + f(s.max) + '</td></tr></table>');
+  root.querySelector('#stats-form').addEventListener('submit', e => { e.preventDefault(); setUi({ statsRange: val(root, 'stats-range') }); });
+}
+function renderPersist(root, st) {
+  let size = 0; try { size = (localStorage.getItem(KEY) || '').length; } catch (e) {}
+  h(root, '<h2>Persist</h2><p>The book is saved to localStorage under <code>' + esc(KEY) + '</code> after every change and restored when the page opens. Stored now: ' + size + ' characters, ' + st.sheets.length + ' sheet' + (st.sheets.length === 1 ? '' : 's') + '.</p><div class="row"><button class="act" id="persist-save">Save now</button><button class="act" id="persist-load">Reload from storage</button><button class="act" id="persist-clear">Clear storage</button></div>' + note(true, st.ui.persistMsg));
+  root.querySelector('#persist-save').addEventListener('click', () => { App.features.persist.model.save(App.store.get()); setUi({ persistMsg: 'Saved.' }); });
+  root.querySelector('#persist-load').addEventListener('click', () => { const doc = App.features.persist.model.load(); if (doc) App.store.set({ sheets: doc.sheets, active: doc.active, names: doc.names || {} }); setUi({ persistMsg: doc ? 'Loaded.' : 'Nothing stored.' }); });
+  root.querySelector('#persist-clear').addEventListener('click', () => { App.features.persist.model.clear(); setUi({ persistMsg: 'Storage cleared; the next change saves again.' }); });
+}
+function renderKeys(root, st) {
+  const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', 'Tab', 'Shift+Tab', 'Home', 'Ctrl+Home'];
+  const sel = st.ui.selected || 'A1'; const b = App.features.grid.model.bounds(activeSheet(st)); const bounds = { cols: Math.max(b.cols + 2, 8), rows: Math.max(b.rows + 2, 20) };
+  h(root, '<h2>Keys</h2><p>Selected: <b>' + esc(sel) + '</b>. On the grid these keys move the selection; Delete clears the cell; typing starts editing in the formula bar.</p><div class="row">' + keys.map(k => '<button class="sub" data-key="' + k + '">' + k + ' &rarr; ' + App.features.keys.model.next(sel, k, bounds) + '</button>').join('') + '</div>');
+  on(root, 'button[data-key]', 'click', e => App.select(App.features.keys.model.next(App.store.get().ui.selected || 'A1', e.target.dataset.key, bounds)));
+}
+
+// ---------- mount ----------
+App.mount = function (doc) {
+  App.doc = doc;
+  const stored = App.features.persist.model.load();
+  if (stored && stored.sheets && stored.sheets.length) state = Object.assign({}, state, { sheets: stored.sheets, active: stored.active, names: stored.names || {} });
+  if (!state.sheets.length) state = Object.assign({}, state, { sheets: [{ id: 'sheet1', name: 'Sheet1', cells: { A1: { raw: 'Item' }, B1: { raw: 'Price' }, A2: { raw: 'Coffee' }, B2: { raw: '3.5' }, A3: { raw: 'Bread' }, B3: { raw: '2.25' }, A4: { raw: 'Total' }, B4: { raw: '=SUM(B2:B3)' } }, formats: { B4: { bold: true, format: { kind: 'currency', decimals: 2 } } }, rules: {}, conditional: [] }], active: 'sheet1' });
+  const renderAll = st => {
+    if (!st.sheets.some(s => s.id === st.active)) { state = Object.assign({}, st, { active: st.sheets[0] && st.sheets[0].id }); st = state; }
+    for (const name of FEATURES) { const root = doc.getElementById('panel-' + name); if (root) { try { App.features[name].render(root, st); } catch (e) { root.innerHTML = '<p class="msg">' + esc(name + ' failed to render: ' + e.message) + '</p>'; } } }
+    const status = doc.getElementById('status'); if (status) status.textContent = activeSheet(st).name + ' - ' + (st.ui.selected || 'A1');
+  };
+  App.store.subscribe(renderAll);
+  doc.querySelectorAll('nav#tabs button').forEach(b => b.addEventListener('click', () => App.router.show(b.dataset.tab)));
+  doc.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z' && e.target.id !== 'formula') { e.preventDefault(); App.undo(); } if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z')) && e.target.id !== 'formula') { e.preventDefault(); App.redo(); } });
+  renderAll(state);
+  App.router.show(state.ui.tab || 'grid');
+};
+window.App = App;
+})();
+</script>
+<script>App.mount(document);</script>
+</body>
+</html>

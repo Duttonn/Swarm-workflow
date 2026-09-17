@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Markdown Notebook</title>
+<style>
+  :root { --bg: #f4f4f1; --card: #ffffff; --ink: #24292f; --muted: #6e7781; --line: #d8dbe0;
+          --accent: #7c3aed; --soft: #ede9fe; --good: #1a7f37; --bad: #b42318; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 12px 20px; }
+  header h1 { margin: 0 0 8px; font-size: 20px; }
+  nav#tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  nav#tabs button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 6px 10px;
+                    border-radius: 6px; cursor: pointer; font: inherit; }
+  nav#tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { max-width: 960px; margin: 20px auto; padding: 0 20px; }
+  section.panel { display: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; }
+  section.panel.active { display: block; }
+  section.panel h2 { margin: 0 0 12px; font-size: 18px; }
+  .split { display: grid; grid-template-columns: 240px 1fr; gap: 16px; }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  ul.list li { padding: 6px 8px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  ul.list li.current { background: var(--soft); }
+  ul.list li .when { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  input, textarea, select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; width: 100%; }
+  textarea { min-height: 260px; font-family: ui-monospace, Consolas, monospace; resize: vertical; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  button.primary { background: var(--accent); color: #fff; border: 0; padding: 7px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
+  button.small { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px; cursor: pointer; font: inherit; }
+  button.small:disabled { opacity: .5; cursor: default; }
+  .muted { color: var(--muted); }
+  .preview { line-height: 1.6; }
+  .preview h1, .preview h2, .preview h3 { margin: 14px 0 6px; }
+  .preview code { background: var(--soft); padding: 1px 4px; border-radius: 4px; font-family: ui-monospace, Consolas, monospace; }
+  .preview pre { background: #f6f8fa; padding: 10px; border-radius: 6px; overflow-x: auto; }
+  .preview a.wikilink { color: var(--accent); text-decoration: underline dotted; cursor: pointer; }
+  .preview a.wikilink.missing { color: var(--bad); }
+  .chip { display: inline-block; background: var(--soft); border-radius: 12px; padding: 2px 10px; margin: 0 6px 6px 0; cursor: pointer; }
+  .chip.active { background: var(--accent); color: #fff; }
+  .stats { display: flex; gap: 20px; flex-wrap: wrap; }
+  .stat { flex: 1 1 140px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .stat b { display: block; font-size: 22px; }
+  ol.outline { padding-left: 0; list-style: none; }
+  ol.outline li { cursor: default; }
+  .pinned::before { content: "\2605 "; color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Markdown Notebook</h1>
+  <nav id="tabs" aria-label="Features">
+    <button data-tab="notes">Notes</button>
+    <button data-tab="markdown">Preview</button>
+    <button data-tab="tags">Tags</button>
+    <button data-tab="links">Links</button>
+    <button data-tab="backlinks">Backlinks</button>
+    <button data-tab="search">Search</button>
+    <button data-tab="outline">Outline</button>
+    <button data-tab="stats">Stats</button>
+    <button data-tab="pins">Pinned</button>
+    <button data-tab="history">History</button>
+    <button data-tab="exporter">Export / Import</button>
+    <button data-tab="persist">Saved data</button>
+  </nav>
+</header>
+<main>
+  <section id="panel-notes" class="panel"></section>
+  <section id="panel-markdown" class="panel"></section>
+  <section id="panel-tags" class="panel"></section>
+  <section id="panel-links" class="panel"></section>
+  <section id="panel-backlinks" class="panel"></section>
+  <section id="panel-search" class="panel"></section>
+  <section id="panel-outline" class="panel"></section>
+  <section id="panel-stats" class="panel"></section>
+  <section id="panel-pins" class="panel"></section>
+  <section id="panel-history" class="panel"></section>
+  <section id="panel-exporter" class="panel"></section>
+  <section id="panel-persist" class="panel"></section>
+</main>
+<script id="app">
+(function () {
+'use strict';
+var App = { features: {} };
+
+// ---- shared helpers (frozen) ------------------------------------------------
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function byId(list, id) {
+  for (var i = 0; i < list.length; i++) if (String(list[i].id) === String(id)) return list[i];
+  return null;
+}
+function current(state) {
+  return byId(state.notes, state.ui.current) || state.notes[0] || null;
+}
+function when(ms) {
+  var d = new Date(Number(ms) || 0);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function noteList(state, notes, extra) {
+  var cur = current(state);
+  return '<ul class="list">' + notes.map(function (n) {
+    return '<li data-open="' + esc(n.id) + '" class="' + (cur && cur.id === n.id ? 'current' : '') + '"><span class="' + (n.pinned ? 'pinned' : '') + '">' +
+      esc(n.title || '(untitled)') + '</span><span class="when">' + (extra ? extra(n) : when(n.updated)) + '</span></li>';
+  }).join('') + (notes.length ? '' : '<li class="muted">Nothing here</li>') + '</ul>';
+}
+function wireOpen(root) {
+  root.querySelectorAll('[data-open]').forEach(function (li) {
+    li.addEventListener('click', function () { App.store.ui({ current: li.getAttribute('data-open') }); });
+  });
+}
+// Replace the notes list and record the step in the history. Every feature that changes notes goes through here.
+App.commit = function (notes) {
+  var s = App.store.get();
+  App.store.set({ notes: notes, history: App.features.history.model.push(s.history, notes) });
+};
+
+// ---- store ------------------------------------------------------------------
+App.store = (function () {
+  var state = { notes: [], history: null, ui: { current: null, query: '', tag: '' } };
+  var subs = [];
+  return {
+    get: function () { return state; },
+    set: function (patch) {
+      var next = typeof patch === 'function' ? patch(state) : patch;
+      state = Object.assign({}, state, next);
+      subs.forEach(function (fn) { fn(state); });
+    },
+    ui: function (patch) { this.set({ ui: Object.assign({}, state.ui, patch) }); },
+    subscribe: function (fn) { subs.push(fn); }
+  };
+})();
+
+// ---- router -----------------------------------------------------------------
+App.router = {
+  show: function (name) {
+    var panels = document.querySelectorAll('section.panel');
+    for (var i = 0; i < panels.length; i++) panels[i].classList.toggle('active', panels[i].id === 'panel-' + name);
+    var tabs = document.querySelectorAll('nav#tabs button[data-tab]');
+    for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('active', tabs[j].getAttribute('data-tab') === name);
+    try { if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name); } catch (e) {}
+  },
+  init: function () {
+    var self = this;
+    document.querySelectorAll('nav#tabs button[data-tab]').forEach(function (b) {
+      b.addEventListener('click', function () { self.show(b.getAttribute('data-tab')); });
+    });
+    var start = (location.hash || '').slice(1);
+    self.show(document.getElementById('panel-' + start) ? start : 'notes');
+  }
+};
+
+// ---- feature: notes ------------------------------------------------------------
+App.features.notes = {
+  seq: 0,
+  model: {
+    create: function (list, title, body, now) {
+      App.features.notes.seq += 1;
+      var id = 'n' + Number(now).toString(36) + '-' + App.features.notes.seq;
+      return list.concat([{ id: id, title: String(title == null ? '' : title), body: String(body == null ? '' : body),
+                            created: now, updated: now, pinned: false }]);
+    },
+    update: function (list, id, patch, now) {
+      return list.map(function (n) {
+        return String(n.id) === String(id) ? Object.assign({}, n, patch, { updated: now }) : n;
+      });
+    },
+    remove: function (list, id) {
+      return list.filter(function (n) { return String(n.id) !== String(id); });
+    }
+  },
+  render: function (root, state) {
+    var model = this.model, cur = current(state);
+    root.innerHTML = '<h2>Notes</h2><div class="toolbar"><button class="primary" id="note-new">New note</button>' +
+      (cur ? '<button class="small" id="note-delete">Delete</button>' : '') + '</div>' +
+      '<div class="split"><div>' + noteList(state, state.notes) + '</div><div>' +
+      (cur ? '<p><input id="note-title" value="' + esc(cur.title) + '" placeholder="Title"></p>' +
+             '<textarea id="note-body" placeholder="Write markdown here">' + esc(cur.body) + '</textarea>' +
+             '<p class="muted">Created ' + when(cur.created) + ', updated ' + when(cur.updated) + '</p>'
+           : '<p class="muted">Create a note to start writing.</p>') + '</div></div>';
+    wireOpen(root);
+    root.querySelector('#note-new').addEventListener('click', function () {
+      var s = App.store.get(), next = model.create(s.notes, 'Untitled', '', Date.now());
+      App.store.set({ ui: Object.assign({}, s.ui, { current: next[next.length - 1].id }) });
+      App.commit(next);
+    });
+    if (!cur) return;
+    root.querySelector('#note-delete').addEventListener('click', function () {
+      App.commit(model.remove(App.store.get().notes, cur.id));
+    });
+    root.querySelector('#note-title').addEventListener('input', function (ev) {
+      App.commit(model.update(App.store.get().notes, cur.id, { title: ev.target.value }, Date.now()));
+    });
+    root.querySelector('#note-body').addEventListener('input', function (ev) {
+      App.commit(model.update(App.store.get().notes, cur.id, { body: ev.target.value }, Date.now()));
+    });
+  }
+};
+
+// ---- feature: markdown ---------------------------------------------------------
+App.features.markdown = {
+  model: {
+    inline: function (text) {
+      var s = esc(text);
+      s = s.replace(/`([^`]+)`/g, function (_, c) { return '<code>' + c + '</code>'; });
+      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      s = s.replace(/\[\[([^\]]+)\]\]/g, function (_, t) { return '<a class="wikilink" data-title="' + t.trim() + '">' + t.trim() + '</a>'; });
+      s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function (_, t, u) {
+        var href = /^\s*javascript:/i.test(u) ? '#' : u;
+        return '<a href="' + href + '">' + t + '</a>';
+      });
+      return s;
+    },
+    render: function (src) {
+      var lines = String(src == null ? '' : src).split(/\r?\n/), out = [], para = [], list = [], code = null;
+      var inline = this.inline;
+      function flush() {
+        if (para.length) { out.push('<p>' + para.map(inline).join(' ') + '</p>'); para = []; }
+        if (list.length) { out.push('<ul>' + list.map(function (i) { return '<li>' + inline(i) + '</li>'; }).join('') + '</ul>'); list = []; }
+      }
+      lines.forEach(function (line) {
+        if (code !== null) {
+          if (/^```/.test(line)) { out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>'); code = null; }
+          else code.push(line);
+          return;
+        }
+        var h = /^(#{1,6})\s+(.*\S)\s*$/.exec(line), li = /^\s*[-*]\s+(.*)$/.exec(line);
+        if (/^```/.test(line)) { flush(); code = []; }
+        else if (h) { flush(); out.push('<h' + h[1].length + '>' + inline(h[2]) + '</h' + h[1].length + '>'); }
+        else if (li) { if (para.length) flush(); list.push(li[1]); }
+        else if (!line.trim()) flush();
+        else { if (list.length) flush(); para.push(line); }
+      });
+      if (code !== null) out.push('<pre><code>' + esc(code.join('\n')) + '</code></pre>');
+      flush();
+      return out.join('\n');
+    }
+  },
+  render: function (root, state) {
+    var cur = current(state);
+    root.innerHTML = '<h2>Preview</h2>' + (cur ? '<h3>' + esc(cur.title) + '</h3><div class="preview">' + this.model.render(cur.body) + '</div>'
+      : '<p class="muted">No note selected.</p>');
+    root.querySelectorAll('a.wikilink').forEach(function (a) {
+      var target = byId(state.notes, App.features.links.model.resolve(state.notes, a.getAttribute('data-title')));
+      if (!target) a.classList.add('missing');
+      a.addEventListener('click', function () { if (target) App.store.ui({ current: target.id }); });
+    });
+  }
+};
+
+// ---- feature: tags --------------------------------------------------------------
+App.features.tags = {
+  model: {
+    tags: function (body) {
+      var seen = {}, out = [], re = /(^|[^\w&#])#([A-Za-z][\w-]*)/g, m;
+      var s = String(body == null ? '' : body);
+      while ((m = re.exec(s))) {
+        var t = m[2].toLowerCase();
+        if (!seen[t]) { seen[t] = true; out.push(t); }
+      }
+      return out;
+    },
+    index: function (notes) {
+      var idx = {}, self = this;
+      notes.forEach(function (n) {
+        self.tags(n.body).forEach(function (t) { (idx[t] = idx[t] || []).push(n.id); });
+      });
+      return idx;
+    }
+  },
+  render: function (root, state) {
+    var idx = this.model.index(state.notes), names = Object.keys(idx).sort(), tag = state.ui.tag;
+    var shown = tag && idx[tag] ? state.notes.filter(function (n) { return idx[tag].indexOf(n.id) >= 0; }) : [];
+    root.innerHTML = '<h2>Tags</h2><p>' + (names.length ? names.map(function (t) {
+      return '<span class="chip ' + (t === tag ? 'active' : '') + '" data-tag="' + esc(t) + '">#' + esc(t) + ' (' + idx[t].length + ')</span>';
+    }).join('') : '<span class="muted">Write #tags in a note to see them here.</span>') + '</p>' +
+      (tag ? '<h3>#' + esc(tag) + '</h3>' + noteList(state, shown) : '');
+    root.querySelectorAll('[data-tag]').forEach(function (c) {
+      c.addEventListener('click', function () { var t = c.getAttribute('data-tag'); App.store.ui({ tag: t === tag ? '' : t }); });
+    });
+    wireOpen(root);
+  }
+};
+
+// ---- feature: links -------------------------------------------------------------
+App.features.links = {
+  model: {
+    links: function (body) {
+      var out = [], seen = {}, re = /\[\[([^\]]+)\]\]/g, m, s = String(body == null ? '' : body);
+      while ((m = re.exec(s))) {
+        var t = m[1].trim();
+        if (!seen[t]) { seen[t] = true; out.push(t); }
+      }
+      return out;
+    },
+    resolve: function (notes, title) {
+      var want = String(title == null ? '' : title).trim().toLowerCase();
+      for (var i = 0; i < notes.length; i++) if (String(notes[i].title || '').trim().toLowerCase() === want) return notes[i].id;
+      return null;
+    }
+  },
+  render: function (root, state) {
+    var model = this.model, cur = current(state);
+    var targets = cur ? model.links(cur.body) : [];
+    root.innerHTML = '<h2>Links from this note</h2>' + (cur ? '<p class="muted">' + esc(cur.title) + ' links to ' + targets.length + ' page' + (targets.length === 1 ? '' : 's') + '. Write [[Title]] to link.</p>' : '') +
+      '<ul class="list">' + targets.map(function (t) {
+        var id = model.resolve(state.notes, t);
+        return '<li ' + (id ? 'data-open="' + esc(id) + '"' : '') + '><span>' + esc(t) + '</span><span class="when">' + (id ? 'exists' : 'missing') + '</span></li>';
+      }).join('') + (targets.length ? '' : '<li class="muted">No links</li>') + '</ul>';
+    wireOpen(root);
+  }
+};
+
+// ---- feature: backlinks ---------------------------------------------------------
+App.features.backlinks = {
+  model: {
+    backlinks: function (notes, id) {
+      var target = byId(notes, id);
+      if (!target) return [];
+      var title = String(target.title || '').trim().toLowerCase();
+      return notes.filter(function (n) {
+        if (String(n.id) === String(id)) return false;
+        var re = /\[\[([^\]]+)\]\]/g, m, s = String(n.body || '');
+        while ((m = re.exec(s))) if (m[1].trim().toLowerCase() === title) return true;
+        return false;
+      }).map(function (n) { return n.id; });
+    }
+  },
+  render: function (root, state) {
+    var cur = current(state), ids = cur ? this.model.backlinks(state.notes, cur.id) : [];
+    var notes = ids.map(function (id) { return byId(state.notes, id); }).filter(Boolean);
+    root.innerHTML = '<h2>Backlinks</h2>' + (cur ? '<p class="muted">Notes that link to ' + esc(cur.title) + ': ' + notes.length + '</p>' : '') + noteList(state, notes);
+    wireOpen(root);
+  }
+};
+
+// ---- feature: search ------------------------------------------------------------
+App.features.search = {
+  model: {
+    search: function (notes, query) {
+      var q = String(query == null ? '' : query).trim().toLowerCase();
+      if (!q) return notes.map(function (n) { return n.id; });
+      var terms = q.split(/\s+/), titles = [], bodies = [];
+      notes.forEach(function (n) {
+        var title = String(n.title || '').toLowerCase(), hay = title + '\n' + String(n.body || '').toLowerCase();
+        var all = terms.every(function (t) { return hay.indexOf(t) >= 0; });
+        if (!all) return;
+        if (title.indexOf(q) >= 0) titles.push(n.id); else bodies.push(n.id);
+      });
+      return titles.concat(bodies);
+    }
+  },
+  render: function (root, state) {
+    var q = state.ui.query || '', ids = this.model.search(state.notes, q);
+    var notes = ids.map(function (id) { return byId(state.notes, id); }).filter(Boolean);
+    root.innerHTML = '<h2>Search</h2><p><input id="search" type="search" placeholder="Search titles and text" value="' + esc(q) + '"></p>' +
+      '<p class="muted">' + notes.length + ' result' + (notes.length === 1 ? '' : 's') + '</p>' + noteList(state, notes);
+    root.querySelector('#search').addEventListener('input', function (ev) { App.store.ui({ query: ev.target.value }); });
+    wireOpen(root);
+  }
+};
+
+// ---- feature: outline -----------------------------------------------------------
+App.features.outline = {
+  model: {
+    outline: function (body) {
+      var out = [];
+      String(body == null ? '' : body).split(/\r?\n/).forEach(function (line) {
+        var h = /^(#{1,6})\s+(.*\S)\s*$/.exec(line);
+        if (h) out.push({ level: h[1].length, text: h[2] });
+      });
+      return out;
+    }
+  },
+  render: function (root, state) {
+    var cur = current(state), items = cur ? this.model.outline(cur.body) : [];
+    root.innerHTML = '<h2>Outline</h2>' + (cur ? '<p class="muted">' + esc(cur.title) + '</p>' : '') + '<ol class="outline">' +
+      items.map(function (i) { return '<li style="padding-left:' + ((i.level - 1) * 18) + 'px">H' + i.level + ' ' + esc(i.text) + '</li>'; }).join('') +
+      (items.length ? '' : '<li class="muted">No headings yet: start a line with # to add one.</li>') + '</ol>';
+  }
+};
+
+// ---- feature: stats -------------------------------------------------------------
+App.features.stats = {
+  model: {
+    stats: function (body) {
+      var s = String(body == null ? '' : body), words = s.trim() ? s.trim().split(/\s+/).length : 0;
+      return { words: words, chars: s.length, minutes: Math.ceil(words / 200) };
+    }
+  },
+  render: function (root, state) {
+    var cur = current(state), st = this.model.stats(cur ? cur.body : '');
+    var all = state.notes.reduce(function (n, x) { return n + this.model.stats(x.body).words; }.bind(this), 0);
+    root.innerHTML = '<h2>Stats</h2>' + (cur ? '<p class="muted">' + esc(cur.title) + '</p>' : '') + '<div class="stats">' +
+      '<div class="stat">Words<b>' + st.words + '</b></div><div class="stat">Characters<b>' + st.chars + '</b></div>' +
+      '<div class="stat">Reading time<b>' + st.minutes + ' min</b></div><div class="stat">Words in all notes<b>' + all + '</b></div></div>';
+  }
+};
+
+// ---- feature: pins --------------------------------------------------------------
+App.features.pins = {
+  model: {
+    order: function (notes) {
+      return notes.slice().sort(function (a, b) {
+        var pa = a.pinned ? 1 : 0, pb = b.pinned ? 1 : 0;
+        return pb - pa || (Number(b.updated) || 0) - (Number(a.updated) || 0);
+      });
+    },
+    toggle: function (notes, id) {
+      return notes.map(function (n) { return String(n.id) === String(id) ? Object.assign({}, n, { pinned: !n.pinned }) : n; });
+    }
+  },
+  render: function (root, state) {
+    var model = this.model, ordered = model.order(state.notes);
+    root.innerHTML = '<h2>Pinned first</h2><p class="muted">Pinned notes stay on top; the rest follow by last update.</p><ul class="list">' +
+      ordered.map(function (n) {
+        return '<li><span class="' + (n.pinned ? 'pinned' : '') + '" data-open="' + esc(n.id) + '">' + esc(n.title || '(untitled)') + '</span>' +
+          '<button class="small" data-pin="' + esc(n.id) + '">' + (n.pinned ? 'Unpin' : 'Pin') + '</button></li>';
+      }).join('') + (ordered.length ? '' : '<li class="muted">No notes</li>') + '</ul>';
+    root.querySelectorAll('[data-pin]').forEach(function (b) {
+      b.addEventListener('click', function () { App.commit(model.toggle(App.store.get().notes, b.getAttribute('data-pin'))); });
+    });
+    wireOpen(root);
+  }
+};
+
+// ---- feature: history -----------------------------------------------------------
+App.features.history = {
+  model: {
+    init: function (snapshot) { return { past: [], present: snapshot, future: [] }; },
+    present: function (h) { return h ? h.present : undefined; },
+    canUndo: function (h) { return !!(h && h.past.length); },
+    canRedo: function (h) { return !!(h && h.future.length); },
+    push: function (h, snapshot) {
+      if (!h) return this.init(snapshot);
+      return { past: h.past.concat([h.present]), present: snapshot, future: [] };
+    },
+    undo: function (h) {
+      if (!this.canUndo(h)) return h;
+      return { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present].concat(h.future) };
+    },
+    redo: function (h) {
+      if (!this.canRedo(h)) return h;
+      return { past: h.past.concat([h.present]), present: h.future[0], future: h.future.slice(1) };
+    }
+  },
+  render: function (root, state) {
+    var model = this.model, h = state.history;
+    root.innerHTML = '<h2>History</h2><div class="toolbar">' +
+      '<button class="small" id="history-undo"' + (model.canUndo(h) ? '' : ' disabled') + '>Undo</button>' +
+      '<button class="small" id="history-redo"' + (model.canRedo(h) ? '' : ' disabled') + '>Redo</button></div>' +
+      '<p class="muted">' + (h ? h.past.length : 0) + ' step' + (h && h.past.length === 1 ? '' : 's') + ' behind, ' + (h ? h.future.length : 0) + ' ahead.</p>';
+    root.querySelector('#history-undo').addEventListener('click', function () {
+      var next = model.undo(App.store.get().history);
+      App.store.set({ history: next, notes: model.present(next) });
+    });
+    root.querySelector('#history-redo').addEventListener('click', function () {
+      var next = model.redo(App.store.get().history);
+      App.store.set({ history: next, notes: model.present(next) });
+    });
+  }
+};
+
+// ---- feature: exporter ----------------------------------------------------------
+App.features.exporter = {
+  model: {
+    toJson: function (notes) {
+      return JSON.stringify({ format: 'markdown-notebook', version: 1, notes: notes }, null, 2);
+    },
+    fromJson: function (text) {
+      try {
+        var data = JSON.parse(String(text));
+        var list = Array.isArray(data) ? data : data && Array.isArray(data.notes) ? data.notes : null;
+        if (!list) return [];
+        return list.filter(function (n) { return n && typeof n === 'object' && n.id != null; }).map(function (n) {
+          return { id: n.id, title: String(n.title == null ? '' : n.title), body: String(n.body == null ? '' : n.body),
+                   created: Number(n.created) || 0, updated: Number(n.updated) || 0, pinned: !!n.pinned };
+        });
+      } catch (e) { return []; }
+    }
+  },
+  render: function (root, state) {
+    var model = this.model, note = state.ui.importNote || '';
+    root.innerHTML = '<h2>Export</h2><textarea id="export-json" readonly>' + esc(model.toJson(state.notes)) + '</textarea>' +
+      '<h2>Import</h2><p class="muted">Paste a JSON export; notes with a known id replace the existing note.</p>' +
+      '<textarea id="import-json" placeholder="{ &quot;notes&quot;: [] }"></textarea>' +
+      '<p><button class="primary" id="import-run">Import</button> <span class="muted">' + esc(note) + '</span></p>';
+    root.querySelector('#import-run').addEventListener('click', function () {
+      var incoming = model.fromJson(root.querySelector('#import-json').value);
+      var list = App.store.get().notes.slice();
+      incoming.forEach(function (n) {
+        var i = list.findIndex(function (x) { return String(x.id) === String(n.id); });
+        if (i >= 0) list[i] = n; else list.push(n);
+      });
+      App.store.ui({ importNote: incoming.length + ' notes imported' });
+      App.commit(list);
+    });
+  }
+};
+
+// ---- feature: persist -----------------------------------------------------------
+App.features.persist = {
+  model: {
+    KEY: 'markdown-notebook-v1',
+    save: function (state) {
+      var data = { notes: (state && state.notes) || [] };
+      localStorage.setItem(this.KEY, JSON.stringify(data));
+      return data;
+    },
+    load: function () {
+      try {
+        var raw = localStorage.getItem(this.KEY);
+        if (!raw) return null;
+        var data = JSON.parse(raw);
+        if (!data || typeof data !== 'object' || !Array.isArray(data.notes)) return null;
+        return { notes: data.notes };
+      } catch (e) { return null; }
+    },
+    clear: function () { localStorage.removeItem(this.KEY); }
+  },
+  render: function (root, state) {
+    var model = this.model;
+    root.innerHTML = '<h2>Saved data</h2><p>Notes are saved automatically in this browser under the key <code>' + esc(model.KEY) + '</code>: ' +
+      state.notes.length + ' note' + (state.notes.length === 1 ? '' : 's') + '.</p><p><button class="small" id="persist-clear">Clear saved data</button></p>';
+    root.querySelector('#persist-clear').addEventListener('click', function () {
+      model.clear();
+      App.commit([]);
+    });
+  }
+};
+
+// ---- mount (frozen) ---------------------------------------------------------------
+App.mount = function (doc) {
+  var saved = App.features.persist.model.load();
+  var notes = saved ? saved.notes : [];
+  if (!saved) {
+    notes = App.features.notes.model.create(notes, 'Welcome',
+      '# Welcome\n\nThis notebook keeps **markdown** notes in your browser.\n\n- Write [[Ideas]] to link a note by title\n- Add #tags anywhere\n\nOpen the tabs above to explore.', Date.now());
+  }
+  App.store.set({ notes: notes, history: App.features.history.model.init(notes), ui: Object.assign({}, App.store.get().ui, { current: notes.length ? notes[0].id : null }) });
+  function renderAll(state) {
+    var active = doc.activeElement, focusId = active && active.id;
+    var start = active && active.selectionStart, end = active && active.selectionEnd;
+    Object.keys(App.features).forEach(function (name) {
+      var root = doc.getElementById('panel-' + name);
+      if (root) App.features[name].render(root, state);
+    });
+    if (focusId) {
+      var again = doc.getElementById(focusId);
+      if (again) { again.focus(); if (again.setSelectionRange && typeof start === 'number') { try { again.setSelectionRange(start, end); } catch (e) {} } }
+    }
+  }
+  App.store.subscribe(renderAll);
+  App.store.subscribe(function (state) { App.features.persist.model.save(state); });
+  renderAll(App.store.get());
+  App.router.init();
+};
+
+window.App = App;
+})();
+</script>
+<script>App.mount(document);</script>
+</body>
+</html>

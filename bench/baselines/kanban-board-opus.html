@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kanban Board</title>
+<style>
+  :root { --bg: #f4f5f7; --panel: #fff; --line: #d8dbe0; --ink: #1b1f24; --muted: #66707d; --accent: #2a6fdb; --warn: #c8102e; --ok: #1e8e3e; --soon: #b26a00; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, Segoe UI, sans-serif; background: var(--bg); color: var(--ink); }
+  header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  nav#tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+  nav#tabs button { border: 1px solid var(--line); background: var(--panel); padding: 4px 9px; border-radius: 4px; cursor: pointer; font: inherit; }
+  nav#tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { padding: 16px; }
+  .panel { display: none; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; }
+  .panel.active { display: block; }
+  .panel h2 { margin: 0 0 10px; font-size: 16px; }
+  form.row, .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  input, select, textarea, button { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
+  button.small { padding: 2px 6px; font-size: 12px; cursor: pointer; }
+  .board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(200px, 1fr); gap: 10px; overflow-x: auto; }
+  .col { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; min-height: 80px; }
+  .col h3 { margin: 0 0 8px; font-size: 14px; display: flex; justify-content: space-between; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; margin-bottom: 6px; }
+  .card .t { font-weight: 600; }
+  .card .m { font-size: 12px; color: var(--muted); }
+  .tag { display: inline-block; font-size: 11px; background: #e8eef9; color: #234; border-radius: 3px; padding: 0 5px; margin-right: 4px; }
+  .err { color: var(--warn); font-size: 13px; }
+  .ok { color: var(--ok); }
+  .overdue { color: var(--warn); font-weight: 600; }
+  .soon { color: var(--soon); font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+  textarea { width: 100%; min-height: 120px; font-family: Consolas, monospace; font-size: 12px; }
+  pre { background: var(--bg); padding: 8px; overflow: auto; max-height: 300px; font-size: 12px; }
+  .wip-full { outline: 2px solid var(--warn); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kanban Board</h1>
+  <nav id="tabs">
+    <button data-tab="columns">Columns</button>
+    <button data-tab="cards">Cards</button>
+    <button data-tab="move">Move</button>
+    <button data-tab="wiplimit">WIP limit</button>
+    <button data-tab="labels">Labels</button>
+    <button data-tab="search">Search</button>
+    <button data-tab="due">Due</button>
+    <button data-tab="sortcolumn">Sort column</button>
+    <button data-tab="archive">Archive</button>
+    <button data-tab="history">History</button>
+    <button data-tab="swimlanes">Swimlanes</button>
+    <button data-tab="assignees">Assignees</button>
+    <button data-tab="exporter">Export</button>
+    <button data-tab="importer">Import</button>
+    <button data-tab="metrics">Metrics</button>
+    <button data-tab="persist">Persist</button>
+  </nav>
+</header>
+<main>
+  <section id="panel-columns" class="panel"></section>
+  <section id="panel-cards" class="panel"></section>
+  <section id="panel-move" class="panel"></section>
+  <section id="panel-wiplimit" class="panel"></section>
+  <section id="panel-labels" class="panel"></section>
+  <section id="panel-search" class="panel"></section>
+  <section id="panel-due" class="panel"></section>
+  <section id="panel-sortcolumn" class="panel"></section>
+  <section id="panel-archive" class="panel"></section>
+  <section id="panel-history" class="panel"></section>
+  <section id="panel-swimlanes" class="panel"></section>
+  <section id="panel-assignees" class="panel"></section>
+  <section id="panel-exporter" class="panel"></section>
+  <section id="panel-importer" class="panel"></section>
+  <section id="panel-metrics" class="panel"></section>
+  <section id="panel-persist" class="panel"></section>
+</main>
+
+<script id="app">
+// part:store
+var App = { features: {} };
+(function () {
+  var state = { columns: [], cards: [], ui: { tab: 'columns', filterTag: '', query: '', today: '' } };
+  var subs = [];
+  App.store = {
+    get: function () { return state; },
+    set: function (patch) {
+      state = Object.assign({}, state, patch || {});
+      subs.forEach(function (fn) { fn(state); });
+    },
+    subscribe: function (fn) { subs.push(fn); return function () { subs = subs.filter(function (s) { return s !== fn; }); }; }
+  };
+})();
+// /part:store
+
+// part:shell
+App.util = {
+  uid: function (prefix) { return (prefix || 'id') + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8); },
+  isoDate: function (s) { return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !isNaN(Date.parse(s + 'T00:00:00Z')); },
+  days: function (a, b) { return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000); },
+  addDays: function (d, n) { var t = new Date(Date.parse(d + 'T00:00:00Z') + n * 86400000); return t.toISOString().slice(0, 10); },
+  today: function () { return new Date().toISOString().slice(0, 10); },
+  esc: function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); },
+  slug: function (name) { return String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'col'; }
+};
+// /part:shell
+
+// part:router
+App.router = {
+  show: function (name) {
+    var doc = App.doc || (typeof document !== 'undefined' ? document : null);
+    if (!doc) return;
+    var panels = doc.querySelectorAll('.panel');
+    for (var i = 0; i < panels.length; i++) panels[i].classList.toggle('active', panels[i].id === 'panel-' + name);
+    var tabs = doc.querySelectorAll('#tabs button');
+    for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('active', tabs[j].dataset.tab === name);
+    if (App.store.get().ui.tab !== name) App.store.set({ ui: Object.assign({}, App.store.get().ui, { tab: name }) });
+  }
+};
+// /part:router
+
+// part:columns
+App.features.columns = {
+  model: {
+    add: function (columns, name) { return columns.concat([{ id: App.util.uid('col'), name: String(name).trim(), wip: null }]); },
+    rename: function (columns, id, name) { return columns.map(function (c) { return c.id === id ? Object.assign({}, c, { name: String(name).trim() }) : c; }); },
+    remove: function (columns, id) { return columns.filter(function (c) { return c.id !== id; }); },
+    validate: function (name, columns) {
+      var errors = [], n = String(name == null ? '' : name).trim();
+      if (!n) errors.push('The column name is blank.');
+      else if ((columns || []).some(function (c) { return c.name.toLowerCase() === n.toLowerCase(); })) errors.push('A column named "' + n + '" already exists.');
+      return errors;
+    }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc;
+    var rows = state.columns.map(function (c) {
+      return '<tr><td><input data-rename="' + h(c.id) + '" value="' + h(c.name) + '"></td><td>' + (c.wip == null ? 'unlimited' : c.wip) + '</td><td><button class="small" data-del="' + h(c.id) + '">Delete</button></td></tr>';
+    }).join('');
+    root.innerHTML = '<h2>Columns</h2><form class="row" id="col-form"><input id="col-name" placeholder="New column name"><button class="primary" type="submit">Add column</button><span class="err" id="col-err"></span></form>' +
+      '<table><thead><tr><th>Name (edit and press Enter)</th><th>WIP</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+    root.querySelector('#col-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var name = root.querySelector('#col-name').value, errors = m.validate(name, App.store.get().columns);
+      root.querySelector('#col-err').textContent = errors.join(' ');
+      if (!errors.length) App.commit({ columns: m.add(App.store.get().columns, name) });
+    });
+    root.querySelectorAll('[data-rename]').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        var others = App.store.get().columns.filter(function (c) { return c.id !== inp.dataset.rename; });
+        var errors = m.validate(inp.value, others);
+        if (errors.length) { root.querySelector('#col-err').textContent = errors.join(' '); return; }
+        App.commit({ columns: m.rename(App.store.get().columns, inp.dataset.rename, inp.value) });
+      });
+    });
+    root.querySelectorAll('[data-del]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var s = App.store.get();
+        App.commit({ columns: m.remove(s.columns, b.dataset.del), cards: s.cards.filter(function (c) { return c.column !== b.dataset.del; }) });
+      });
+    });
+  }
+};
+// /part:columns
+
+// part:cards
+App.features.cards = {
+  model: {
+    add: function (cards, card) {
+      return cards.concat([{ id: App.util.uid('card'), title: String(card.title).trim(), description: card.description || '', tags: (card.tags || []).slice(), due: card.due || null, assignee: card.assignee || null, column: card.column, created: card.created || App.util.today(), done: null, archived: false }]);
+    },
+    update: function (cards, id, patch) { return cards.map(function (c) { return c.id === id ? Object.assign({}, c, patch) : c; }); },
+    remove: function (cards, id) { return cards.filter(function (c) { return c.id !== id; }); },
+    validate: function (card) {
+      var errors = [];
+      if (!card || !String(card.title == null ? '' : card.title).trim()) errors.push('The title is blank.');
+      var tags = card && card.tags;
+      if (tags != null && (!Array.isArray(tags) || tags.some(function (t) { return typeof t !== 'string' || !t.trim(); }))) errors.push('Every tag must be a non-empty word.');
+      if (card && card.due != null && card.due !== '' && !App.util.isoDate(card.due)) errors.push('The due date must be YYYY-MM-DD.');
+      return errors;
+    }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc;
+    var cols = state.columns.map(function (c) { return '<option value="' + h(c.id) + '">' + h(c.name) + '</option>'; }).join('');
+    var list = state.cards.filter(function (c) { return !c.archived; }).map(function (c) {
+      var col = state.columns.filter(function (k) { return k.id === c.column; })[0];
+      return '<tr><td>' + h(c.title) + '</td><td>' + h(col ? col.name : c.column) + '</td><td>' + c.tags.map(function (t) { return '<span class="tag">' + h(t) + '</span>'; }).join('') + '</td><td>' + h(c.due || '') + '</td><td>' + h(c.assignee || '') + '</td><td><button class="small" data-edit="' + h(c.id) + '">Edit</button> <button class="small" data-remove="' + h(c.id) + '">Delete</button></td></tr>';
+    }).join('');
+    root.innerHTML = '<h2>Cards</h2><form class="row" id="card-form"><input id="c-title" placeholder="Title"><input id="c-desc" placeholder="Description"><input id="c-tags" placeholder="tags, comma separated"><input id="c-due" placeholder="YYYY-MM-DD"><input id="c-who" placeholder="assignee"><select id="c-col">' + cols + '</select><input type="hidden" id="c-id"><button class="primary" type="submit">Save card</button><span class="err" id="card-err"></span></form>' +
+      '<table><thead><tr><th>Title</th><th>Column</th><th>Tags</th><th>Due</th><th>Assignee</th><th></th></tr></thead><tbody>' + list + '</tbody></table>';
+    root.querySelector('#card-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var q = function (id) { return root.querySelector(id).value; };
+      var draft = { title: q('#c-title'), description: q('#c-desc'), tags: q('#c-tags').split(',').map(function (t) { return t.trim(); }).filter(Boolean), due: q('#c-due') || null, assignee: q('#c-who') || null, column: q('#c-col') };
+      var errors = m.validate(draft);
+      root.querySelector('#card-err').textContent = errors.join(' ');
+      if (errors.length) return;
+      var s = App.store.get(), id = q('#c-id');
+      App.commit({ cards: id ? m.update(s.cards, id, draft) : m.add(s.cards, draft) });
+    });
+    root.querySelectorAll('[data-remove]').forEach(function (b) { b.addEventListener('click', function () { App.commit({ cards: m.remove(App.store.get().cards, b.dataset.remove) }); }); });
+    root.querySelectorAll('[data-edit]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var c = App.store.get().cards.filter(function (k) { return k.id === b.dataset.edit; })[0];
+        if (!c) return;
+        root.querySelector('#c-id').value = c.id; root.querySelector('#c-title').value = c.title; root.querySelector('#c-desc').value = c.description;
+        root.querySelector('#c-tags').value = c.tags.join(', '); root.querySelector('#c-due').value = c.due || ''; root.querySelector('#c-who').value = c.assignee || ''; root.querySelector('#c-col').value = c.column;
+      });
+    });
+  }
+};
+// /part:cards
+
+// part:move
+App.features.move = {
+  model: {
+    inColumn: function (cards, columnId) { return cards.filter(function (c) { return c.column === columnId && !c.archived; }); },
+    move: function (cards, id, toColumn, index) {
+      var card = cards.filter(function (c) { return c.id === id; })[0];
+      if (!card) return cards.slice();
+      var moved = Object.assign({}, card, { column: toColumn });
+      var rest = cards.filter(function (c) { return c.id !== id; });
+      var siblings = rest.filter(function (c) { return c.column === toColumn && !c.archived; });
+      var at = Math.max(0, Math.min(Number(index) || 0, siblings.length));
+      if (at >= siblings.length) {
+        var lastIdx = -1;
+        rest.forEach(function (c, i) { if (c.column === toColumn) lastIdx = i; });
+        var out = rest.slice(); out.splice(lastIdx + 1, 0, moved); return out;
+      }
+      var target = siblings[at], pos = rest.indexOf(target);
+      var out2 = rest.slice(); out2.splice(pos, 0, moved); return out2;
+    }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc, wip = App.features.wiplimit.model;
+    var board = state.columns.map(function (col) {
+      var items = m.inColumn(state.cards, col.id).map(function (c, i) {
+        return '<div class="card"><div class="t">' + h(c.title) + '</div><div class="m">' + h(c.assignee || 'unassigned') + (c.due ? ' · due ' + h(c.due) : '') + '</div><div class="row">' +
+          state.columns.map(function (k) { return k.id === col.id ? '' : '<button class="small" data-mv="' + h(c.id) + '" data-to="' + h(k.id) + '">to ' + h(k.name) + '</button>'; }).join('') +
+          (i > 0 ? '<button class="small" data-up="' + h(c.id) + '" data-col="' + h(col.id) + '" data-i="' + (i - 1) + '">up</button>' : '') + '</div></div>';
+      }).join('');
+      var full = col.wip != null && m.inColumn(state.cards, col.id).length >= col.wip;
+      return '<div class="col' + (full ? ' wip-full' : '') + '"><h3><span>' + h(col.name) + '</span><span class="m">' + m.inColumn(state.cards, col.id).length + (col.wip != null ? ' / ' + col.wip : '') + '</span></h3>' + items + '</div>';
+    }).join('');
+    root.innerHTML = '<h2>Move</h2><p class="err" id="move-err"></p><div class="board">' + board + '</div>';
+    root.querySelectorAll('[data-mv]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var s = App.store.get(), verdict = wip.canMove(s.cards, s.columns, b.dataset.mv, b.dataset.to);
+        root.querySelector('#move-err').textContent = verdict.reason;
+        if (verdict.ok) App.commit({ cards: m.move(s.cards, b.dataset.mv, b.dataset.to, 99999) });
+      });
+    });
+    root.querySelectorAll('[data-up]').forEach(function (b) { b.addEventListener('click', function () { App.commit({ cards: m.move(App.store.get().cards, b.dataset.up, b.dataset.col, Number(b.dataset.i)) }); }); });
+  }
+};
+// /part:move
+
+// part:wiplimit
+App.features.wiplimit = {
+  model: {
+    canMove: function (cards, columns, id, toColumn) {
+      var col = columns.filter(function (c) { return c.id === toColumn; })[0];
+      if (!col) return { ok: false, reason: 'No such column.' };
+      if (col.wip == null) return { ok: true, reason: '' };
+      var count = cards.filter(function (c) { return c.column === toColumn && !c.archived && c.id !== id; }).length;
+      if (count >= col.wip) return { ok: false, reason: '"' + col.name + '" is at its WIP limit of ' + col.wip + '.' };
+      return { ok: true, reason: '' };
+    },
+    setLimit: function (columns, id, wip) { return columns.map(function (c) { return c.id === id ? Object.assign({}, c, { wip: wip == null || wip === '' ? null : Number(wip) }) : c; }); }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc;
+    var rows = state.columns.map(function (c) {
+      var n = state.cards.filter(function (k) { return k.column === c.id && !k.archived; }).length;
+      return '<tr><td>' + h(c.name) + '</td><td>' + n + '</td><td><input type="number" min="1" data-wip="' + h(c.id) + '" value="' + (c.wip == null ? '' : c.wip) + '" placeholder="unlimited"></td><td>' + (c.wip != null && n >= c.wip ? '<span class="err">full</span>' : '<span class="ok">room</span>') + '</td></tr>';
+    }).join('');
+    root.innerHTML = '<h2>WIP limits</h2><p>Set a limit per column; a move into a full column is refused on the Move tab.</p><table><thead><tr><th>Column</th><th>Cards</th><th>Limit</th><th>State</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    root.querySelectorAll('[data-wip]').forEach(function (inp) { inp.addEventListener('change', function () { App.commit({ columns: m.setLimit(App.store.get().columns, inp.dataset.wip, inp.value) }); }); });
+  }
+};
+// /part:wiplimit
+
+// part:labels
+App.features.labels = {
+  model: {
+    all: function (cards) {
+      var seen = {}, out = [];
+      cards.forEach(function (c) { (c.tags || []).forEach(function (t) { var k = t.toLowerCase(); if (!seen[k]) { seen[k] = true; out.push(t); } }); });
+      return out.sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0; });
+    },
+    withTag: function (cards, tag) { var k = String(tag).toLowerCase(); return cards.filter(function (c) { return (c.tags || []).some(function (t) { return t.toLowerCase() === k; }); }); },
+    counts: function (cards) {
+      var out = {}, names = App.features.labels.model.all(cards);
+      names.forEach(function (t) { out[t] = App.features.labels.model.withTag(cards, t).length; });
+      return out;
+    }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc, counts = m.counts(state.cards), active = state.ui.filterTag || '';
+    var chips = Object.keys(counts).map(function (t) { return '<button class="small' + (t === active ? ' primary' : '') + '" data-tag="' + h(t) + '">' + h(t) + ' (' + counts[t] + ')</button>'; }).join(' ');
+    var shown = active ? m.withTag(state.cards, active) : state.cards;
+    var list = shown.filter(function (c) { return !c.archived; }).map(function (c) { return '<li>' + h(c.title) + ' ' + c.tags.map(function (t) { return '<span class="tag">' + h(t) + '</span>'; }).join('') + '</li>'; }).join('');
+    root.innerHTML = '<h2>Labels</h2><div class="row">' + chips + ' <button class="small" data-tag="">all</button></div><ul>' + list + '</ul>';
+    root.querySelectorAll('[data-tag]').forEach(function (b) { b.addEventListener('click', function () { App.store.set({ ui: Object.assign({}, App.store.get().ui, { filterTag: b.dataset.tag }) }); }); });
+  }
+};
+// /part:labels
+
+// part:search
+App.features.search = {
+  model: {
+    search: function (cards, query) {
+      var q = String(query == null ? '' : query).trim().toLowerCase();
+      if (!q) return cards.slice();
+      return cards.filter(function (c) { return (c.title || '').toLowerCase().indexOf(q) >= 0 || (c.description || '').toLowerCase().indexOf(q) >= 0; });
+    }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc, q = state.ui.query || '';
+    var hits = m.search(state.cards, q).filter(function (c) { return !c.archived; });
+    root.innerHTML = '<h2>Search</h2><div class="row"><input id="q" value="' + h(q) + '" placeholder="type to filter by title or description"></div><ul>' + hits.map(function (c) { return '<li><b>' + h(c.title) + '</b> ' + h(c.description) + '</li>'; }).join('') + '</ul><p class="m">' + hits.length + ' card(s)</p>';
+    var inp = root.querySelector('#q');
+    inp.addEventListener('input', function () { App.store.set({ ui: Object.assign({}, App.store.get().ui, { query: inp.value }) }); var again = root.querySelector('#q'); if (again) { again.focus(); again.setSelectionRange(again.value.length, again.value.length); } });
+  }
+};
+// /part:search
+
+// part:due
+App.features.due = {
+  model: {
+    classify: function (card, today) {
+      if (!card || !card.due) return 'none';
+      if (card.due < today) return 'overdue';
+      if (card.due <= App.util.addDays(today, 3)) return 'soon';
+      return 'later';
+    },
+    overdue: function (cards, today) { return cards.filter(function (c) { return !c.archived && !c.done && c.due && c.due < today; }); }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc, today = state.ui.today || App.util.today();
+    var rows = state.cards.filter(function (c) { return !c.archived; }).map(function (c) { var k = m.classify(c, today); return '<tr><td>' + h(c.title) + '</td><td>' + h(c.due || '') + '</td><td class="' + k + '">' + k + '</td></tr>'; }).join('');
+    root.innerHTML = '<h2>Due</h2><div class="row"><label>Today <input id="today" value="' + h(today) + '"></label></div><table><thead><tr><th>Card</th><th>Due</th><th>State</th></tr></thead><tbody>' + rows + '</tbody></table><p>' + m.overdue(state.cards, today).length + ' overdue</p>';
+    root.querySelector('#today').addEventListener('change', function (e) { App.store.set({ ui: Object.assign({}, App.store.get().ui, { today: e.target.value }) }); });
+  }
+};
+// /part:due
+
+// part:sortcolumn
+App.features.sortcolumn = {
+  model: {
+    inColumnOrder: function (cards, columnId) { return cards.filter(function (c) { return c.column === columnId && !c.archived; }); },
+    sortBy: function (cards, columnId, key, dir) {
+      var mine = cards.filter(function (c) { return c.column === columnId && !c.archived; });
+      var sign = dir === 'desc' ? -1 : 1;
+      var sorted = mine.slice().sort(function (a, b) {
+        var va = a[key], vb = b[key];
+        if (key === 'due') { if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; }
+        if (key === 'title') { va = String(va).toLowerCase(); vb = String(vb).toLowerCase(); }
+        return va < vb ? -sign : va > vb ? sign : 0;
+      });
+      var slots = [];
+      cards.forEach(function (c, i) { if (c.column === columnId && !c.archived) slots.push(i); });
+      var out = cards.slice();
+      slots.forEach(function (i, n) { out[i] = sorted[n]; });
+      return out;
+    }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc;
+    var cols = state.columns.map(function (c) { return '<option value="' + h(c.id) + '">' + h(c.name) + '</option>'; }).join('');
+    root.innerHTML = '<h2>Sort a column</h2><div class="row"><select id="s-col">' + cols + '</select><select id="s-key"><option value="due">due date</option><option value="title">title</option><option value="created">created</option></select><select id="s-dir"><option value="asc">ascending</option><option value="desc">descending</option></select><button class="primary" id="s-go">Sort</button></div>' +
+      '<div class="board">' + state.columns.map(function (col) { return '<div class="col"><h3>' + h(col.name) + '</h3>' + m.inColumnOrder(state.cards, col.id).map(function (c) { return '<div class="card"><div class="t">' + h(c.title) + '</div><div class="m">due ' + h(c.due || '-') + ' · created ' + h(c.created) + '</div></div>'; }).join('') + '</div>'; }).join('') + '</div>';
+    root.querySelector('#s-go').addEventListener('click', function () {
+      var v = function (id) { return root.querySelector(id).value; };
+      App.commit({ cards: m.sortBy(App.store.get().cards, v('#s-col'), v('#s-key'), v('#s-dir')) });
+    });
+  }
+};
+// /part:sortcolumn
+
+// part:archive
+App.features.archive = {
+  model: {
+    archive: function (cards, id) { return cards.map(function (c) { return c.id === id ? Object.assign({}, c, { archived: true }) : c; }); },
+    restore: function (cards, id) { return cards.map(function (c) { return c.id === id ? Object.assign({}, c, { archived: false }) : c; }); },
+    active: function (cards) { return cards.filter(function (c) { return !c.archived; }); },
+    archived: function (cards) { return cards.filter(function (c) { return c.archived; }); }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc;
+    root.innerHTML = '<h2>Archive</h2><h3>On the board</h3><ul>' + m.active(state.cards).map(function (c) { return '<li>' + h(c.title) + ' <button class="small" data-arc="' + h(c.id) + '">Archive</button></li>'; }).join('') + '</ul><h3>Archived</h3><ul>' + m.archived(state.cards).map(function (c) { return '<li>' + h(c.title) + ' <button class="small" data-res="' + h(c.id) + '">Restore</button></li>'; }).join('') + '</ul>';
+    root.querySelectorAll('[data-arc]').forEach(function (b) { b.addEventListener('click', function () { App.commit({ cards: m.archive(App.store.get().cards, b.dataset.arc) }); }); });
+    root.querySelectorAll('[data-res]').forEach(function (b) { b.addEventListener('click', function () { App.commit({ cards: m.restore(App.store.get().cards, b.dataset.res) }); }); });
+  }
+};
+// /part:archive
+
+// part:history
+App.features.history = {
+  model: {
+    LIMIT: 20,
+    empty: function () { return { past: [], future: [] }; },
+    push: function (stack, state) { var past = stack.past.concat([state]); if (past.length > 20) past = past.slice(past.length - 20); return { past: past, future: [] }; },
+    undo: function (stack, current) {
+      if (!stack.past.length) return { stack: stack, state: current };
+      var past = stack.past.slice(0, -1), prev = stack.past[stack.past.length - 1];
+      return { stack: { past: past, future: [current].concat(stack.future) }, state: prev };
+    },
+    redo: function (stack, current) {
+      if (!stack.future.length) return { stack: stack, state: current };
+      var next = stack.future[0];
+      return { stack: { past: stack.past.concat([current]), future: stack.future.slice(1) }, state: next };
+    },
+    canUndo: function (stack) { return stack.past.length > 0; },
+    canRedo: function (stack) { return stack.future.length > 0; },
+    depth: function (stack) { return stack.past.length; }
+  },
+  render: function (root, state) {
+    var m = this.model, stack = App.history;
+    root.innerHTML = '<h2>History</h2><div class="row"><button class="primary" id="undo"' + (m.canUndo(stack) ? '' : ' disabled') + '>Undo</button><button class="primary" id="redo"' + (m.canRedo(stack) ? '' : ' disabled') + '>Redo</button><span class="m">' + m.depth(stack) + ' step(s) back, ' + stack.future.length + ' forward</span></div><p>Every change made on the other tabs is recorded here, twenty steps deep.</p>';
+    root.querySelector('#undo').addEventListener('click', function () { var r = m.undo(App.history, App.snapshot()); App.history = r.stack; App.store.set(r.state); });
+    root.querySelector('#redo').addEventListener('click', function () { var r = m.redo(App.history, App.snapshot()); App.history = r.stack; App.store.set(r.state); });
+  }
+};
+// /part:history
+
+// part:swimlanes
+App.features.swimlanes = {
+  model: {
+    byAssignee: function (cards) {
+      var active = cards.filter(function (c) { return !c.archived; }), lanes = {}, none = [];
+      active.forEach(function (c) { if (c.assignee) (lanes[c.assignee] = lanes[c.assignee] || []).push(c); else none.push(c); });
+      var out = Object.keys(lanes).sort().map(function (n) { return { assignee: n, cards: lanes[n] }; });
+      if (none.length) out.push({ assignee: 'Unassigned', cards: none });
+      return out;
+    }
+  },
+  render: function (root, state) {
+    var h = App.util.esc, lanes = this.model.byAssignee(state.cards);
+    root.innerHTML = '<h2>Swimlanes</h2>' + lanes.map(function (l) {
+      return '<h3>' + h(l.assignee) + ' (' + l.cards.length + ')</h3><div class="board">' + state.columns.map(function (col) { return '<div class="col"><h3>' + h(col.name) + '</h3>' + l.cards.filter(function (c) { return c.column === col.id; }).map(function (c) { return '<div class="card"><div class="t">' + h(c.title) + '</div></div>'; }).join('') + '</div>'; }).join('') + '</div>';
+    }).join('');
+  }
+};
+// /part:swimlanes
+
+// part:assignees
+App.features.assignees = {
+  model: {
+    assign: function (cards, id, name) { return cards.map(function (c) { return c.id === id ? Object.assign({}, c, { assignee: String(name).trim() || null }) : c; }); },
+    unassign: function (cards, id) { return cards.map(function (c) { return c.id === id ? Object.assign({}, c, { assignee: null }) : c; }); },
+    workload: function (cards) { var out = {}; cards.forEach(function (c) { if (!c.archived && c.assignee) out[c.assignee] = (out[c.assignee] || 0) + 1; }); return out; },
+    people: function (cards) { return Object.keys(App.features.assignees.model.workload(cards)).sort(); }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc, load = m.workload(state.cards);
+    root.innerHTML = '<h2>Assignees</h2><table><thead><tr><th>Person</th><th>Active cards</th></tr></thead><tbody>' + Object.keys(load).sort().map(function (p) { return '<tr><td>' + h(p) + '</td><td>' + load[p] + '</td></tr>'; }).join('') + '</tbody></table>' +
+      '<h3>Cards</h3><table><tbody>' + state.cards.filter(function (c) { return !c.archived; }).map(function (c) { return '<tr><td>' + h(c.title) + '</td><td><input data-as="' + h(c.id) + '" value="' + h(c.assignee || '') + '" placeholder="assign to"></td><td><button class="small" data-un="' + h(c.id) + '">Unassign</button></td></tr>'; }).join('') + '</tbody></table>';
+    root.querySelectorAll('[data-as]').forEach(function (inp) { inp.addEventListener('change', function () { App.commit({ cards: m.assign(App.store.get().cards, inp.dataset.as, inp.value) }); }); });
+    root.querySelectorAll('[data-un]').forEach(function (b) { b.addEventListener('click', function () { App.commit({ cards: m.unassign(App.store.get().cards, b.dataset.un) }); }); });
+  }
+};
+// /part:assignees
+
+// part:exporter
+App.features.exporter = {
+  model: {
+    toJSON: function (state) { return JSON.stringify({ version: 2, columns: state.columns, cards: state.cards }, null, 2); },
+    toMarkdown: function (state) {
+      return state.columns.map(function (col) {
+        var lines = state.cards.filter(function (c) { return c.column === col.id && !c.archived; }).map(function (c) { return '- [' + (c.done ? 'x' : ' ') + '] ' + c.title; });
+        return '## ' + col.name + '\n' + lines.join('\n');
+      }).join('\n\n') + '\n';
+    }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc;
+    root.innerHTML = '<h2>Export</h2><h3>JSON</h3><pre id="x-json">' + h(m.toJSON(state)) + '</pre><h3>Markdown</h3><pre id="x-md">' + h(m.toMarkdown(state)) + '</pre>';
+  }
+};
+// /part:exporter
+
+// part:importer
+App.features.importer = {
+  model: {
+    parse: function (text) {
+      var errors = [], doc;
+      try { doc = JSON.parse(text); } catch (e) { return { columns: [], cards: [], errors: ['The text is not valid JSON.'] }; }
+      if (!doc || !Array.isArray(doc.columns)) return { columns: [], cards: [], errors: ['The document has no columns array.'] };
+      var columns = doc.columns.filter(function (c) { return c && c.id && c.name; }).map(function (c) { return { id: String(c.id), name: String(c.name), wip: c.wip == null ? null : Number(c.wip) }; });
+      var ids = {}; columns.forEach(function (c) { ids[c.id] = true; });
+      var cards = [];
+      (Array.isArray(doc.cards) ? doc.cards : []).forEach(function (c, i) {
+        var label = (c && c.title) ? '"' + c.title + '"' : 'card ' + (i + 1);
+        if (!c || !String(c.title == null ? '' : c.title).trim()) { errors.push(label + ': the title is blank.'); return; }
+        if (!ids[c.column]) { errors.push(label + ': column "' + c.column + '" does not exist.'); return; }
+        cards.push({ id: c.id || App.util.uid('card'), title: String(c.title), description: c.description || '', tags: Array.isArray(c.tags) ? c.tags.slice() : [], due: c.due || null, assignee: c.assignee || null, column: c.column, created: c.created || App.util.today(), done: c.done || null, archived: !!c.archived });
+      });
+      return { columns: columns, cards: cards, errors: errors };
+    }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc;
+    root.innerHTML = '<h2>Import</h2><textarea id="i-text" placeholder="paste a JSON export"></textarea><div class="row"><button class="primary" id="i-go">Import</button></div><ul class="err" id="i-err"></ul><p class="ok" id="i-ok"></p>';
+    root.querySelector('#i-go').addEventListener('click', function () {
+      var r = m.parse(root.querySelector('#i-text').value), s = App.store.get();
+      root.querySelector('#i-err').innerHTML = r.errors.map(function (e) { return '<li>' + h(e) + '</li>'; }).join('');
+      if (r.columns.length || r.cards.length) {
+        var known = {}; s.columns.forEach(function (c) { known[c.id] = true; });
+        var newCols = r.columns.filter(function (c) { return !known[c.id]; });
+        var have = {}; s.cards.forEach(function (c) { have[c.id] = true; });
+        var newCards = r.cards.filter(function (c) { return !have[c.id]; });
+        App.commit({ columns: s.columns.concat(newCols), cards: s.cards.concat(newCards) });
+        root.querySelector('#i-ok').textContent = 'Added ' + newCols.length + ' column(s) and ' + newCards.length + ' card(s).';
+      }
+    });
+  }
+};
+// /part:importer
+
+// part:metrics
+App.features.metrics = {
+  model: {
+    cycleTime: function (card) { return card && card.done && card.created ? App.util.days(card.created, card.done) : null; },
+    averageCycle: function (cards) { var v = cards.map(function (c) { return App.features.metrics.model.cycleTime(c); }).filter(function (x) { return x != null; }); return v.length ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : 0; },
+    throughput: function (cards, weekStart) { var end = App.util.addDays(weekStart, 6); return cards.filter(function (c) { return c.done && c.done >= weekStart && c.done <= end; }).length; }
+  },
+  render: function (root, state) {
+    var m = this.model, h = App.util.esc, today = state.ui.today || App.util.today();
+    var weeks = [0, 1, 2, 3].map(function (n) { var start = App.util.addDays(today, -7 * (n + 1) + 1); return '<tr><td>' + h(start) + '</td><td>' + m.throughput(state.cards, start) + '</td></tr>'; }).join('');
+    root.innerHTML = '<h2>Metrics</h2><p>Average cycle time: <b>' + m.averageCycle(state.cards).toFixed(1) + ' days</b></p><table><thead><tr><th>Card</th><th>Created</th><th>Done</th><th>Cycle (days)</th></tr></thead><tbody>' + state.cards.filter(function (c) { return c.done; }).map(function (c) { return '<tr><td>' + h(c.title) + '</td><td>' + h(c.created) + '</td><td>' + h(c.done) + '</td><td>' + m.cycleTime(c) + '</td></tr>'; }).join('') + '</tbody></table><h3>Throughput, last four weeks</h3><table><thead><tr><th>Week starting</th><th>Done</th></tr></thead><tbody>' + weeks + '</tbody></table>';
+  }
+};
+// /part:metrics
+
+// part:persist
+App.features.persist = {
+  model: {
+    KEY: 'kanban-board.v2',
+    save: function (state) { localStorage.setItem('kanban-board.v2', JSON.stringify({ version: 2, columns: state.columns, cards: state.cards })); },
+    load: function () {
+      var raw = localStorage.getItem('kanban-board.v2');
+      if (raw == null) return null;
+      try { return App.features.persist.model.migrate(JSON.parse(raw)); } catch (e) { return null; }
+    },
+    migrate: function (doc) {
+      if (!doc) return null;
+      if (doc.version === 2) return doc;
+      var columns = [], byName = {};
+      (doc.cards || []).forEach(function (c) {
+        var name = c.status || 'Backlog';
+        if (!byName[name]) { var col = { id: App.util.slug(name), name: name, wip: null }; byName[name] = col; columns.push(col); }
+      });
+      var cards = (doc.cards || []).map(function (c) {
+        return { id: c.id, title: c.title, description: c.description || '', tags: c.tags || [], due: c.due || null, assignee: c.assignee || null, column: byName[c.status || 'Backlog'].id, created: c.created, done: c.done || null, archived: !!c.archived };
+      });
+      return { version: 2, columns: columns, cards: cards };
+    }
+  },
+  render: function (root, state) {
+    var m = this.model;
+    root.innerHTML = '<h2>Persist</h2><p>The board is saved to localStorage under <code>' + m.KEY + '</code> after every change.</p><div class="row"><button class="primary" id="p-save">Save now</button><button id="p-load">Reload saved</button><button id="p-clear">Clear saved</button></div><p id="p-msg" class="ok"></p>';
+    root.querySelector('#p-save').addEventListener('click', function () { m.save(App.store.get()); root.querySelector('#p-msg').textContent = 'Saved.'; });
+    root.querySelector('#p-load').addEventListener('click', function () { var d = m.load(); if (d) App.store.set({ columns: d.columns, cards: d.cards }); root.querySelector('#p-msg').textContent = d ? 'Loaded ' + d.cards.length + ' card(s).' : 'Nothing saved.'; });
+    root.querySelector('#p-clear').addEventListener('click', function () { localStorage.removeItem(m.KEY); root.querySelector('#p-msg').textContent = 'Cleared.'; });
+  }
+};
+// /part:persist
+
+// part:mount
+App.history = App.features.history.model.empty();
+App.snapshot = function () { var s = App.store.get(); return { columns: s.columns, cards: s.cards }; };
+App.commit = function (patch) {
+  App.history = App.features.history.model.push(App.history, App.snapshot());
+  App.store.set(patch);
+};
+App.mount = function (doc) {
+  App.doc = doc;
+  var saved = App.features.persist.model.load();
+  if (saved) App.store.set({ columns: saved.columns, cards: saved.cards });
+  else App.store.set({
+    columns: [{ id: 'todo', name: 'To do', wip: null }, { id: 'doing', name: 'Doing', wip: 3 }, { id: 'done', name: 'Done', wip: null }],
+    cards: [
+      { id: 'c1', title: 'Write the brief', description: 'One paragraph per feature', tags: ['docs'], due: App.util.addDays(App.util.today(), 2), assignee: 'ana', column: 'todo', created: App.util.addDays(App.util.today(), -3), done: null, archived: false },
+      { id: 'c2', title: 'Fix login redirect', description: 'Cookie not cleared on logout', tags: ['bug'], due: App.util.addDays(App.util.today(), -1), assignee: 'ben', column: 'doing', created: App.util.addDays(App.util.today(), -5), done: null, archived: false },
+      { id: 'c3', title: 'Set up CI', description: 'Pipeline goes red on Windows', tags: ['infra', 'bug'], due: null, assignee: 'ben', column: 'done', created: App.util.addDays(App.util.today(), -9), done: App.util.addDays(App.util.today(), -2), archived: false }
+    ]
+  });
+  var render = function (state) {
+    Object.keys(App.features).forEach(function (name) {
+      var root = doc.getElementById('panel-' + name);
+      if (root) App.features[name].render(root, state);
+    });
+    App.features.persist.model.save(state);
+  };
+  App.store.subscribe(render);
+  render(App.store.get());
+  var tabs = doc.querySelectorAll('#tabs button');
+  for (var i = 0; i < tabs.length; i++) (function (b) { b.addEventListener('click', function () { App.router.show(b.dataset.tab); }); })(tabs[i]);
+  App.router.show(App.store.get().ui.tab || 'columns');
+  doc.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); var r = e.shiftKey ? App.features.history.model.redo(App.history, App.snapshot()) : App.features.history.model.undo(App.history, App.snapshot()); App.history = r.stack; App.store.set(r.state); }
+  });
+};
+// /part:mount
+window.App = App;
+</script>
+<script>App.mount(document);</script>
+</body>
+</html>

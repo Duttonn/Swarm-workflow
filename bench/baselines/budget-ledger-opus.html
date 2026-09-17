@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Budget Ledger</title>
+<style>
+  :root { --bg: #f6f7f9; --card: #ffffff; --ink: #1f2933; --muted: #6b7280; --line: #d9dee5;
+          --accent: #2563eb; --good: #15803d; --bad: #b91c1c; --warn: #b45309; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  header { background: var(--card); border-bottom: 1px solid var(--line); padding: 12px 20px; }
+  header h1 { margin: 0 0 8px; font-size: 20px; }
+  nav#tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  nav#tabs button { border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 6px 10px;
+                    border-radius: 6px; cursor: pointer; font: inherit; }
+  nav#tabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { max-width: 960px; margin: 20px auto; padding: 0 20px; }
+  section.panel { display: none; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; }
+  section.panel.active { display: block; }
+  section.panel h2 { margin: 0 0 12px; font-size: 18px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--good); } .neg { color: var(--bad); } .over { color: var(--bad); font-weight: 600; }
+  form.row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: flex-end; }
+  form.row label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); }
+  input, select, textarea { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+  button.primary { background: var(--accent); color: #fff; border: 0; padding: 7px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
+  button.small { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; font: inherit; }
+  .errors { color: var(--bad); margin: 0 0 10px; padding-left: 18px; }
+  .stats { display: flex; gap: 20px; flex-wrap: wrap; }
+  .stat { flex: 1 1 160px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .stat b { display: block; font-size: 22px; }
+  .muted { color: var(--muted); }
+  textarea { width: 100%; min-height: 140px; font-family: ui-monospace, Consolas, monospace; }
+  svg#chart-svg { width: 100%; height: auto; display: block; }
+  svg#chart-svg text { font: 12px system-ui, sans-serif; fill: var(--ink); }
+  .bar { fill: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Budget Ledger</h1>
+  <nav id="tabs" aria-label="Features">
+    <button data-tab="transactions">Transactions</button>
+    <button data-tab="balance">Balance</button>
+    <button data-tab="categories">Categories</button>
+    <button data-tab="monthly">Monthly</button>
+    <button data-tab="search">Search</button>
+    <button data-tab="sorting">Sorting</button>
+    <button data-tab="budgets">Budgets</button>
+    <button data-tab="recurring">Recurring</button>
+    <button data-tab="exporter">Export</button>
+    <button data-tab="importer">Import</button>
+    <button data-tab="chart">Chart</button>
+    <button data-tab="persist">Saved data</button>
+  </nav>
+</header>
+<main>
+  <section id="panel-transactions" class="panel"></section>
+  <section id="panel-balance" class="panel"></section>
+  <section id="panel-categories" class="panel"></section>
+  <section id="panel-monthly" class="panel"></section>
+  <section id="panel-search" class="panel"></section>
+  <section id="panel-sorting" class="panel"></section>
+  <section id="panel-budgets" class="panel"></section>
+  <section id="panel-recurring" class="panel"></section>
+  <section id="panel-exporter" class="panel"></section>
+  <section id="panel-importer" class="panel"></section>
+  <section id="panel-chart" class="panel"></section>
+  <section id="panel-persist" class="panel"></section>
+</main>
+<script id="app">
+(function () {
+'use strict';
+var App = { features: {} };
+
+// ---- shared helpers (frozen) ------------------------------------------------
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+function cents(n) { return Math.round(n * 100) / 100; }
+function money(n) { return (n < 0 ? '-' : '') + Math.abs(n).toFixed(2); }
+function isoDate(s) { return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')); }
+function today() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function txRows(list, withDelete) {
+  var html = '<table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Amount</th>' +
+    (withDelete ? '<th></th>' : '') + '</tr></thead><tbody>';
+  list.forEach(function (t) {
+    html += '<tr><td>' + esc(t.date) + '</td><td>' + esc(t.description) + '</td><td>' + esc(t.category) +
+      '</td><td class="num ' + (t.amount < 0 ? 'neg' : 'pos') + '">' + money(t.amount) + '</td>' +
+      (withDelete ? '<td><button class="small" data-remove="' + esc(t.id) + '">Delete</button></td>' : '') + '</tr>';
+  });
+  if (!list.length) html += '<tr><td colspan="5" class="muted">No transactions</td></tr>';
+  return html + '</tbody></table>';
+}
+
+// ---- store ------------------------------------------------------------------
+App.store = (function () {
+  var state = { transactions: [], budgets: {}, recurring: [], ui: { tab: 'transactions' } };
+  var subs = [];
+  return {
+    get: function () { return state; },
+    set: function (patch) {
+      var next = typeof patch === 'function' ? patch(state) : patch;
+      state = Object.assign({}, state, next);
+      subs.forEach(function (fn) { fn(state); });
+    },
+    ui: function (patch) {
+      this.set({ ui: Object.assign({}, state.ui, patch) });
+    },
+    subscribe: function (fn) { subs.push(fn); }
+  };
+})();
+
+// ---- router -----------------------------------------------------------------
+App.router = {
+  show: function (name) {
+    var panels = document.querySelectorAll('section.panel');
+    for (var i = 0; i < panels.length; i++) panels[i].classList.toggle('active', panels[i].id === 'panel-' + name);
+    var tabs = document.querySelectorAll('nav#tabs button[data-tab]');
+    for (var j = 0; j < tabs.length; j++) tabs[j].classList.toggle('active', tabs[j].getAttribute('data-tab') === name);
+    try { if (location.hash !== '#' + name) history.replaceState(null, '', '#' + name); } catch (e) {}
+  },
+  init: function () {
+    var self = this;
+    document.querySelectorAll('nav#tabs button[data-tab]').forEach(function (b) {
+      b.addEventListener('click', function () { self.show(b.getAttribute('data-tab')); });
+    });
+    var start = (location.hash || '').slice(1);
+    self.show(document.getElementById('panel-' + start) ? start : 'transactions');
+  }
+};
+
+// ---- feature: transactions ---------------------------------------------------
+App.features.transactions = {
+  seq: 0,
+  model: {
+    add: function (list, tx) {
+      App.features.transactions.seq += 1;
+      var id = 'tx' + Date.now().toString(36) + '-' + App.features.transactions.seq;
+      return list.concat([{ id: id, date: String(tx.date), description: String(tx.description).trim(),
+                            category: String(tx.category || 'Other').trim() || 'Other', amount: Number(tx.amount) }]);
+    },
+    remove: function (list, id) {
+      return list.filter(function (t) { return String(t.id) !== String(id); });
+    },
+    validate: function (tx) {
+      var errors = [];
+      if (!tx || !String(tx.description || '').trim()) errors.push('Description is required');
+      var amount = Number(tx && tx.amount);
+      if (!isFinite(amount) || amount === 0) errors.push('Amount must be a non-zero number');
+      if (!isoDate(tx && tx.date)) errors.push('Date must be YYYY-MM-DD');
+      return errors;
+    }
+  },
+  render: function (root, state) {
+    var errors = state.ui.txErrors || [];
+    root.innerHTML = '<h2>Transactions</h2>' +
+      '<form class="row" id="tx-form">' +
+      '<label>Date<input name="date" type="date" value="' + today() + '"></label>' +
+      '<label>Description<input name="description" placeholder="Groceries"></label>' +
+      '<label>Category<input name="category" placeholder="Food"></label>' +
+      '<label>Amount (negative = expense)<input name="amount" type="number" step="0.01" placeholder="-12.50"></label>' +
+      '<button class="primary" type="submit">Add</button></form>' +
+      (errors.length ? '<ul class="errors">' + errors.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>' : '') +
+      txRows(state.transactions, true);
+    var model = this.model;
+    root.querySelector('#tx-form').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = ev.target;
+      var tx = { date: f.date.value, description: f.description.value, category: f.category.value, amount: f.amount.value };
+      var errs = model.validate(tx);
+      if (errs.length) { App.store.ui({ txErrors: errs }); return; }
+      App.store.set({ transactions: model.add(App.store.get().transactions, tx), ui: Object.assign({}, App.store.get().ui, { txErrors: [] }) });
+    });
+    root.querySelectorAll('button[data-remove]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        App.store.set({ transactions: model.remove(App.store.get().transactions, b.getAttribute('data-remove')) });
+      });
+    });
+  }
+};
+
+// ---- feature: balance --------------------------------------------------------
+App.features.balance = {
+  model: {
+    totals: function (list) {
+      var income = 0, expense = 0;
+      list.forEach(function (t) {
+        var a = Number(t.amount) || 0;
+        if (a > 0) income += a; else expense += -a;
+      });
+      return { income: cents(income), expense: cents(expense), balance: cents(income - expense) };
+    }
+  },
+  render: function (root, state) {
+    var t = this.model.totals(state.transactions);
+    root.innerHTML = '<h2>Balance</h2><div class="stats">' +
+      '<div class="stat">Income<b class="pos">' + money(t.income) + '</b></div>' +
+      '<div class="stat">Expenses<b class="neg">' + money(t.expense) + '</b></div>' +
+      '<div class="stat">Balance<b class="' + (t.balance < 0 ? 'neg' : 'pos') + '">' + money(t.balance) + '</b></div></div>';
+  }
+};
+
+// ---- feature: categories -----------------------------------------------------
+App.features.categories = {
+  model: {
+    byCategory: function (list) {
+      var sums = {};
+      list.forEach(function (t) {
+        var a = Number(t.amount) || 0;
+        if (a < 0) sums[t.category] = (sums[t.category] || 0) + -a;
+      });
+      return Object.keys(sums).map(function (c) { return { category: c, total: cents(sums[c]) }; })
+        .sort(function (x, y) { return y.total - x.total || (x.category < y.category ? -1 : x.category > y.category ? 1 : 0); });
+    }
+  },
+  render: function (root, state) {
+    var rows = this.model.byCategory(state.transactions);
+    root.innerHTML = '<h2>Spending by category</h2><table><thead><tr><th>Category</th><th class="num">Spent</th></tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr><td>' + esc(r.category) + '</td><td class="num">' + money(r.total) + '</td></tr>'; }).join('') +
+      (rows.length ? '' : '<tr><td colspan="2" class="muted">No expenses yet</td></tr>') + '</tbody></table>';
+  }
+};
+
+// ---- feature: monthly --------------------------------------------------------
+App.features.monthly = {
+  model: {
+    months: function (list) {
+      var seen = {};
+      list.forEach(function (t) { if (isoDate(t.date)) seen[String(t.date).slice(0, 7)] = true; });
+      return Object.keys(seen).sort();
+    },
+    forMonth: function (list, month) {
+      return list.filter(function (t) { return String(t.date).slice(0, 7) === month; });
+    }
+  },
+  render: function (root, state) {
+    var months = this.model.months(state.transactions);
+    var month = state.ui.month && months.indexOf(state.ui.month) >= 0 ? state.ui.month : months[months.length - 1] || '';
+    var rows = month ? this.model.forMonth(state.transactions, month) : [];
+    var sum = rows.reduce(function (s, t) { return s + (Number(t.amount) || 0); }, 0);
+    root.innerHTML = '<h2>Monthly view</h2><p><label>Month <select id="month-select">' +
+      months.map(function (m) { return '<option value="' + m + '"' + (m === month ? ' selected' : '') + '>' + m + '</option>'; }).join('') +
+      '</select></label> <span class="muted">Net for the month: ' + money(cents(sum)) + '</span></p>' + txRows(rows, false);
+    root.querySelector('#month-select').addEventListener('change', function (ev) { App.store.ui({ month: ev.target.value }); });
+  }
+};
+
+// ---- feature: search ---------------------------------------------------------
+App.features.search = {
+  model: {
+    search: function (list, query) {
+      var q = String(query == null ? '' : query).trim().toLowerCase();
+      if (!q) return list.slice();
+      return list.filter(function (t) { return String(t.description || '').toLowerCase().indexOf(q) >= 0; });
+    }
+  },
+  render: function (root, state) {
+    var q = state.ui.query || '';
+    var rows = this.model.search(state.transactions, q);
+    root.innerHTML = '<h2>Search</h2><p><input id="search" type="search" placeholder="Filter by description" value="' + esc(q) + '"> ' +
+      '<span class="muted">' + rows.length + ' match' + (rows.length === 1 ? '' : 'es') + '</span></p>' + txRows(rows, false);
+    root.querySelector('#search').addEventListener('input', function (ev) { App.store.ui({ query: ev.target.value }); });
+  }
+};
+
+// ---- feature: sorting --------------------------------------------------------
+App.features.sorting = {
+  model: {
+    sortBy: function (list, key, direction) {
+      var dir = direction === 'desc' ? -1 : 1;
+      return list.slice().sort(function (a, b) {
+        var x = a[key], y = b[key];
+        if (key === 'amount') { x = Number(x); y = Number(y); }
+        else { x = String(x == null ? '' : x).toLowerCase(); y = String(y == null ? '' : y).toLowerCase(); }
+        return (x < y ? -1 : x > y ? 1 : 0) * dir;
+      });
+    }
+  },
+  render: function (root, state) {
+    var key = state.ui.sortKey || 'date', dir = state.ui.sortDir || 'desc';
+    var rows = this.model.sortBy(state.transactions, key, dir);
+    root.innerHTML = '<h2>Sorted list</h2><p><label>Sort by <select id="sort-key">' +
+      ['date', 'amount', 'description'].map(function (k) { return '<option value="' + k + '"' + (k === key ? ' selected' : '') + '>' + k + '</option>'; }).join('') +
+      '</select></label> <label>Direction <select id="sort-dir">' +
+      ['asc', 'desc'].map(function (d) { return '<option value="' + d + '"' + (d === dir ? ' selected' : '') + '>' + d + '</option>'; }).join('') +
+      '</select></label></p>' + txRows(rows, false);
+    root.querySelector('#sort-key').addEventListener('change', function (ev) { App.store.ui({ sortKey: ev.target.value }); });
+    root.querySelector('#sort-dir').addEventListener('change', function (ev) { App.store.ui({ sortDir: ev.target.value }); });
+  }
+};
+
+// ---- feature: budgets --------------------------------------------------------
+App.features.budgets = {
+  model: {
+    status: function (list, limits, month) {
+      return Object.keys(limits || {}).map(function (category) {
+        var limit = Number(limits[category]) || 0, spent = 0;
+        list.forEach(function (t) {
+          var a = Number(t.amount) || 0;
+          if (a < 0 && t.category === category && String(t.date).slice(0, 7) === month) spent += -a;
+        });
+        spent = cents(spent);
+        return { category: category, limit: limit, spent: spent, remaining: cents(limit - spent), over: spent > limit };
+      });
+    }
+  },
+  render: function (root, state) {
+    var month = state.ui.budgetMonth || today().slice(0, 7);
+    var rows = this.model.status(state.transactions, state.budgets, month);
+    root.innerHTML = '<h2>Budgets</h2><form class="row" id="budget-form">' +
+      '<label>Category<input name="category" placeholder="Food"></label>' +
+      '<label>Monthly limit<input name="limit" type="number" step="0.01" min="0" placeholder="150"></label>' +
+      '<label>Month<input name="month" type="month" value="' + month + '"></label>' +
+      '<button class="primary" type="submit">Set limit</button></form>' +
+      '<table><thead><tr><th>Category</th><th class="num">Limit</th><th class="num">Spent</th><th class="num">Remaining</th><th></th></tr></thead><tbody>' +
+      rows.map(function (r) {
+        return '<tr class="' + (r.over ? 'over' : '') + '"><td>' + esc(r.category) + '</td><td class="num">' + money(r.limit) + '</td><td class="num">' + money(r.spent) +
+          '</td><td class="num">' + money(r.remaining) + '</td><td>' + (r.over ? 'OVER' : 'ok') + ' <button class="small" data-drop="' + esc(r.category) + '">Remove</button></td></tr>';
+      }).join('') + (rows.length ? '' : '<tr><td colspan="5" class="muted">No limits set</td></tr>') + '</tbody></table>';
+    root.querySelector('#budget-form').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = ev.target, name = f.category.value.trim(), limit = Number(f.limit.value);
+      var next = Object.assign({}, App.store.get().budgets);
+      if (name && isFinite(limit) && limit >= 0) next[name] = limit;
+      App.store.set({ budgets: next, ui: Object.assign({}, App.store.get().ui, { budgetMonth: f.month.value || month }) });
+    });
+    root.querySelectorAll('button[data-drop]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var next = Object.assign({}, App.store.get().budgets);
+        delete next[b.getAttribute('data-drop')];
+        App.store.set({ budgets: next });
+      });
+    });
+  }
+};
+
+// ---- feature: recurring ------------------------------------------------------
+App.features.recurring = {
+  model: {
+    occurrences: function (rule, from, to) {
+      var out = [];
+      if (!rule || !isoDate(from) || !isoDate(to)) return out;
+      var day = Math.min(28, Math.max(1, Number(rule.day) || 1));
+      var start = isoDate(rule.start) && rule.start > from ? rule.start : from;
+      var y = Number(from.slice(0, 4)), m = Number(from.slice(5, 7));
+      var endY = Number(to.slice(0, 4)), endM = Number(to.slice(5, 7));
+      while (y < endY || (y === endY && m <= endM)) {
+        var date = y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+        if (date >= start && date <= to) {
+          out.push({ date: date, description: rule.description, category: rule.category, amount: Number(rule.amount) });
+        }
+        m += 1; if (m > 12) { m = 1; y += 1; }
+      }
+      return out;
+    }
+  },
+  render: function (root, state) {
+    var model = this.model, now = today();
+    var from = now.slice(0, 7) + '-01', to = now.slice(0, 4) + '-12-28';
+    root.innerHTML = '<h2>Recurring</h2><form class="row" id="rec-form">' +
+      '<label>Description<input name="description" placeholder="Rent"></label>' +
+      '<label>Category<input name="category" placeholder="Housing"></label>' +
+      '<label>Amount<input name="amount" type="number" step="0.01" placeholder="-900"></label>' +
+      '<label>Day of month<input name="day" type="number" min="1" max="28" value="1"></label>' +
+      '<label>Starts<input name="start" type="date" value="' + now + '"></label>' +
+      '<button class="primary" type="submit">Add rule</button></form>' +
+      '<table><thead><tr><th>Rule</th><th>Category</th><th class="num">Amount</th><th>Day</th><th>Starts</th><th></th></tr></thead><tbody>' +
+      state.recurring.map(function (r, i) {
+        return '<tr><td>' + esc(r.description) + '</td><td>' + esc(r.category) + '</td><td class="num">' + money(Number(r.amount)) + '</td><td>' + esc(r.day) +
+          '</td><td>' + esc(r.start) + '</td><td><button class="small" data-post="' + i + '">Post rest of year</button> <button class="small" data-rm="' + i + '">Delete</button></td></tr>';
+      }).join('') + (state.recurring.length ? '' : '<tr><td colspan="6" class="muted">No recurring rules</td></tr>') + '</tbody></table>' +
+      '<p class="muted">Upcoming from ' + from + ' to ' + to + ': ' +
+      state.recurring.reduce(function (n, r) { return n + model.occurrences(r, from, to).length; }, 0) + ' postings</p>';
+    root.querySelector('#rec-form').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var f = ev.target;
+      var rule = { description: f.description.value.trim(), category: f.category.value.trim() || 'Other', amount: Number(f.amount.value), day: Number(f.day.value), start: f.start.value };
+      if (!rule.description || !isFinite(rule.amount) || rule.amount === 0 || !isoDate(rule.start)) return;
+      App.store.set({ recurring: App.store.get().recurring.concat([rule]) });
+    });
+    root.querySelectorAll('button[data-rm]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var i = Number(b.getAttribute('data-rm'));
+        App.store.set({ recurring: App.store.get().recurring.filter(function (_, k) { return k !== i; }) });
+      });
+    });
+    root.querySelectorAll('button[data-post]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var s = App.store.get(), rule = s.recurring[Number(b.getAttribute('data-post'))];
+        var list = s.transactions;
+        model.occurrences(rule, from, to).forEach(function (o) { list = App.features.transactions.model.add(list, o); });
+        App.store.set({ transactions: list });
+      });
+    });
+  }
+};
+
+// ---- feature: exporter -------------------------------------------------------
+App.features.exporter = {
+  model: {
+    toCsv: function (list) {
+      function cell(v) {
+        var s = String(v == null ? '' : v);
+        return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      }
+      var lines = ['date,description,category,amount'];
+      list.forEach(function (t) { lines.push([t.date, t.description, t.category, t.amount].map(cell).join(',')); });
+      return lines.join('\n') + '\n';
+    }
+  },
+  render: function (root, state) {
+    var csv = this.model.toCsv(state.transactions);
+    root.innerHTML = '<h2>Export CSV</h2><p><button class="primary" id="export-copy">Copy to clipboard</button> ' +
+      '<span class="muted">' + state.transactions.length + ' rows</span></p><textarea id="export-csv" readonly>' + esc(csv) + '</textarea>';
+    root.querySelector('#export-copy').addEventListener('click', function () {
+      var ta = root.querySelector('#export-csv');
+      ta.select();
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value);
+    });
+  }
+};
+
+// ---- feature: importer -------------------------------------------------------
+App.features.importer = {
+  model: {
+    fromCsv: function (text) {
+      var rows = [], row = [], field = '', quoted = false, s = String(text == null ? '' : text);
+      for (var i = 0; i < s.length; i++) {
+        var c = s[i];
+        if (quoted) {
+          if (c === '"') { if (s[i + 1] === '"') { field += '"'; i++; } else quoted = false; }
+          else field += c;
+        } else if (c === '"') quoted = true;
+        else if (c === ',') { row.push(field); field = ''; }
+        else if (c === '\n' || c === '\r') {
+          if (c === '\r' && s[i + 1] === '\n') i++;
+          row.push(field); field = ''; rows.push(row); row = [];
+        } else field += c;
+      }
+      if (field !== '' || row.length) { row.push(field); rows.push(row); }
+      rows = rows.filter(function (r) { return r.length > 1 || (r[0] || '').trim(); });
+      if (!rows.length) return [];
+      var header = rows[0].map(function (h) { return h.trim().toLowerCase(); });
+      var col = function (name) { return header.indexOf(name); };
+      var iDate = col('date'), iDesc = col('description'), iCat = col('category'), iAmt = col('amount');
+      if (iDate < 0 || iDesc < 0 || iAmt < 0) return [];
+      return rows.slice(1).map(function (r) {
+        return { date: (r[iDate] || '').trim(), description: r[iDesc] || '', category: iCat >= 0 ? (r[iCat] || '').trim() : 'Other', amount: Number(r[iAmt]) };
+      }).filter(function (t) { return isoDate(t.date) && isFinite(t.amount); });
+    }
+  },
+  render: function (root, state) {
+    var model = this.model;
+    var note = state.ui.importNote || '';
+    root.innerHTML = '<h2>Import CSV</h2><p class="muted">Paste rows with a header line: date,description,category,amount</p>' +
+      '<textarea id="import-csv" placeholder="date,description,category,amount"></textarea>' +
+      '<p><button class="primary" id="import-run">Import</button> <span class="muted">' + esc(note) + '</span></p>';
+    root.querySelector('#import-run').addEventListener('click', function () {
+      var parsed = model.fromCsv(root.querySelector('#import-csv').value);
+      var list = App.store.get().transactions;
+      parsed.forEach(function (t) { list = App.features.transactions.model.add(list, t); });
+      App.store.set({ transactions: list, ui: Object.assign({}, App.store.get().ui, { importNote: parsed.length + ' rows imported' }) });
+    });
+  }
+};
+
+// ---- feature: chart ----------------------------------------------------------
+App.features.chart = {
+  model: {
+    bars: function (list, width) {
+      var sums = {};
+      list.forEach(function (t) {
+        var a = Number(t.amount) || 0;
+        if (a < 0) sums[t.category] = (sums[t.category] || 0) + -a;
+      });
+      var rows = Object.keys(sums).map(function (c) { return { category: c, total: cents(sums[c]) }; })
+        .sort(function (x, y) { return y.total - x.total || (x.category < y.category ? -1 : x.category > y.category ? 1 : 0); });
+      var max = rows.length ? rows[0].total : 0;
+      rows.forEach(function (r) { r.width = max > 0 ? Math.round(width * r.total / max * 100) / 100 : 0; });
+      return rows;
+    }
+  },
+  render: function (root, state) {
+    var bars = this.model.bars(state.transactions, 400), rowH = 26;
+    var height = Math.max(rowH, bars.length * rowH);
+    root.innerHTML = '<h2>Spending chart</h2><svg id="chart-svg" viewBox="0 0 560 ' + height + '" role="img" aria-label="Spending by category">' +
+      bars.map(function (b, i) {
+        var y = i * rowH;
+        return '<text x="0" y="' + (y + 17) + '">' + esc(b.category) + '</text>' +
+          '<rect class="bar" x="120" y="' + (y + 4) + '" width="' + b.width + '" height="18" rx="3"></rect>' +
+          '<text x="' + (126 + b.width) + '" y="' + (y + 17) + '">' + money(b.total) + '</text>';
+      }).join('') + (bars.length ? '' : '<text x="0" y="17">No expenses yet</text>') + '</svg>';
+  }
+};
+
+// ---- feature: persist --------------------------------------------------------
+App.features.persist = {
+  model: {
+    KEY: 'budget-ledger-v1',
+    save: function (state) {
+      var data = { transactions: state.transactions || [], budgets: state.budgets || {}, recurring: state.recurring || [] };
+      localStorage.setItem(this.KEY, JSON.stringify(data));
+      return data;
+    },
+    load: function () {
+      try {
+        var raw = localStorage.getItem(this.KEY);
+        if (!raw) return null;
+        var data = JSON.parse(raw);
+        if (!data || typeof data !== 'object' || !Array.isArray(data.transactions)) return null;
+        return { transactions: data.transactions, budgets: data.budgets || {}, recurring: data.recurring || [] };
+      } catch (e) { return null; }
+    },
+    clear: function () { localStorage.removeItem(this.KEY); }
+  },
+  render: function (root, state) {
+    var model = this.model;
+    root.innerHTML = '<h2>Saved data</h2><p>Everything is saved automatically in this browser under the key <code>' + esc(model.KEY) + '</code>: ' +
+      state.transactions.length + ' transactions, ' + Object.keys(state.budgets).length + ' budgets, ' + state.recurring.length + ' recurring rules.</p>' +
+      '<p><button class="small" id="persist-clear">Clear saved data</button></p>';
+    root.querySelector('#persist-clear').addEventListener('click', function () {
+      model.clear();
+      App.store.set({ transactions: [], budgets: {}, recurring: [] });
+    });
+  }
+};
+
+// ---- mount (frozen) ------------------------------------------------------------
+App.mount = function (doc) {
+  var saved = App.features.persist.model.load();
+  if (saved) App.store.set(saved);
+  function renderAll(state) {
+    var active = doc.activeElement, focusId = active && active.id, caret = active && active.value != null ? active.value.length : 0;
+    Object.keys(App.features).forEach(function (name) {
+      var root = doc.getElementById('panel-' + name);
+      if (root) App.features[name].render(root, state);
+    });
+    if (focusId) {
+      var again = doc.getElementById(focusId);
+      if (again) { again.focus(); if (again.setSelectionRange && again.type !== 'month' && again.type !== 'date' && again.type !== 'number') { try { again.setSelectionRange(caret, caret); } catch (e) {} } }
+    }
+  }
+  App.store.subscribe(renderAll);
+  App.store.subscribe(function (state) { App.features.persist.model.save(state); });
+  renderAll(App.store.get());
+  App.router.init();
+};
+
+window.App = App;
+})();
+</script>
+<script>App.mount(document);</script>
+</body>
+</html>
