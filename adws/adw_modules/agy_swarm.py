@@ -20,6 +20,7 @@ from .agents import _extract_json
 from . import coord, ui_gate
 from .data_types import EnvelopeBase, EventRecord, Phase, PhaseParams, GateReport
 from .docker_sandbox import SwarmSandbox, SandboxUnavailable, docker_ready
+from swarm_workbench.adaptive import REVIEWERS
 from .utils import now_iso
 
 # Gemini CLI is the default runner: it bills per token against an API key, where agy bills a
@@ -385,6 +386,9 @@ def publish_budget(board, run, cap, **counts):
     tmp = path.with_name('budget.json.tmp')
     try:
         tmp.write_text(json.dumps({'run': run.adw_id, 'spent': run.tokens, 'cap': cap,
+                                   'usage_status': 'unknown' if run.__dict__.get('usage_unknown') else 'completed_calls_only',
+                                   'remaining_is_upper_bound': True,
+                                   'provider_quota_remaining': None,
                                    'usd': round(run.__dict__.get('swarm_usd', 0.0), 4), **counts}),
                        encoding='utf-8')
         os.replace(tmp, path)
@@ -623,6 +627,10 @@ def trace(run, phase_id, kind, name, payload):
 
 def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate=True):
     """All DB writes stay on the owner thread. Children only queue stream events."""
+    if run.__dict__.get('swarm_stop'):
+        raise RuntimeError(run.swarm_stop)
+    if not requests:
+        return {}
     started = time.time() if started is None else started
     events, cancel = queue.Queue(), threading.Event()
     phases, label = {}, {r.agent: r for r in requests}
@@ -650,9 +658,18 @@ def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate
         # because a CLI process only reports its tokens when it exits.
         if req.delay and cancel.wait(req.delay):
             raise RuntimeError('%s cancelled before start' % req.agent)
-        if gate and over_budget(run, cap):
+        if cancel.is_set():
+            raise AgentFailed('%s: cancelled before launch' % req.agent)
+        full_cap = run.__dict__.get('swarm_token_limit', 0)
+        if over_budget(run, full_cap) or (gate and over_budget(run, cap)):
             raise BudgetExceeded('%s not started: %s of %s tokens spent'
                                  % (req.agent, f'{run.tokens:,}', f'{cap:,}'))
+        deadline = run.__dict__.get('swarm_deadline')
+        if deadline:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AgentFailed('run wall-time budget exhausted')
+            req.timeout = min(req.timeout, max(1, int(remaining)))
         began[req.agent] = time.monotonic()   # the deadline runs from here, not from submit
         return invoke(req, events, cancel)
 
@@ -672,6 +689,11 @@ def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate
     next_poll = time.monotonic()
     try:
         while pending or not events.empty():
+            deadline = run.__dict__.get('swarm_deadline')
+            if deadline and time.monotonic() >= deadline and not cancel.is_set():
+                run.__dict__['swarm_stop'] = 'run wall-time budget exhausted'
+                cancel.set()
+                trace(run, '', 'log', 'swarm_stop', {'stop_reason': run.swarm_stop})
             if board and time.monotonic() >= next_poll:
                 try:
                     board_refresh(run, board)   # posts reach the trace while agents still run
@@ -711,6 +733,8 @@ def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate
                     proposal, result = future.result()
                     outputs[req.agent] = proposal.model_dump()
                     used = result.get('usage') or {}
+                    if used.get('total_tokens') is None or used.get('usage_status') == 'unknown':
+                        run.__dict__['usage_unknown'] = True
                     run.add_usage(used.get('total_tokens') or 0, 0)
                     # dollars, not just tokens: on a paid runner this is the number the
                     # swarm actually has to ration, and budget.py shows it to every agent.
@@ -731,11 +755,35 @@ def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate
                     # A failed agent still spent its tokens. Counting only successes made the
                     # trace undercount failed runs by two thirds and left the budget blind.
                     run.add_usage(getattr(exc, 'tokens', 0), 0)
+                    usage_path = req.folder / 'usage.json'
+                    try:
+                        failed_usage = json.loads(usage_path.read_text(encoding='utf-8'))
+                    except (OSError, ValueError):
+                        failed_usage = {}
+                    if failed_usage.get('total_tokens') is None:
+                        run.__dict__['usage_unknown'] = True
                     ph.status='fail'; ph.error=str(exc); failures.append(str(exc))
                     trace(run, ph.phase_id, 'error', req.agent, {'error':str(exc)})
+                    reason = str(exc).lower()
+                    if any(word in reason for word in ('insufficient balance', 'daily limit', 'quota exceeded',
+                            'rate limit', 'http 429', 'unauthorized', 'http 401', 'no meaningful',
+                            'idle timeout', 'first output', 'wall-time budget')):
+                        run.__dict__['swarm_stop'] = str(exc)[:500]
+                        cancel.set()
+                        trace(run, '', 'log', 'swarm_stop', {'stop_reason': run.swarm_stop})
                 ph.ended_at=now_iso(); run.tracer.phase_upsert(ph)
                 trace(run, ph.phase_id, 'phase_end', ph.params.name, {'status':ph.status})
                 report()
+                full_cap = run.__dict__.get('swarm_token_limit', 0)
+                if full_cap and run.tokens >= full_cap:
+                    run.__dict__['swarm_stop'] = 'run token budget exhausted'
+                    cancel.set()
+                    trace(run, '', 'log', 'swarm_stop', {'stop_reason': run.swarm_stop})
+                known = not run.__dict__.get('usage_unknown') and not pending
+                trace(run, '', 'log', 'budget_status', {
+                    'tokens_used': run.tokens, 'tokens_known': known,
+                    'tokens_remaining': max(0, full_cap - run.tokens) if known and full_cap else None,
+                    'stop_reason': run.__dict__.get('swarm_stop')})
     finally:
         cancel.set()
         pool.shutdown(wait=False, cancel_futures=True)
@@ -792,6 +840,10 @@ def agent_sandbox(run, runner=RUNNER):
 
 
 def execute_swarm(run, spec, warm=None):
+    run.__dict__['swarm_token_limit'] = budget_cap(spec)
+    timeout = int(os.environ.get('SWARM_RUN_TIMEOUT', '0'))
+    run.__dict__['swarm_deadline'] = time.monotonic() + timeout if timeout else None
+    run.__dict__['swarm_started'] = time.monotonic()
     box = agent_sandbox(run, choose(spec)[0])
     try:
         return run_swarm(run, spec, warm, box)
@@ -824,6 +876,19 @@ def part_spans(text):
         if name in opens and m.start() > opens[name] and name not in spans:
             spans[name] = (opens[name], m.start())
     return spans
+
+
+def assign_groups(roster, size):
+    """Cut the roster to `size` and give every remaining feature to one of the kept owners.
+
+    Returns (kept, [(owner, features)], judges). Contiguous groups, so a group reads as one
+    region of the file rather than a scatter, and the owner's own name leads its group.
+    """
+    dropped = [n for n in roster[size:] if not n.lower().startswith(REVIEWERS)]
+    judges = [n for n in roster[size:] if n.lower().startswith(REVIEWERS)]
+    kept = roster[:size]
+    per = -(-len(dropped) // len(kept)) if dropped else 0
+    return kept, [(o, [o] + dropped[i * per:(i + 1) * per]) for i, o in enumerate(kept)], judges
 
 
 def regroup_skeleton(text, roster):
@@ -918,13 +983,22 @@ def run_swarm(run, spec, warm, box):
         # smaller size those owners do not exist, and a model reading "hashing owns
         # part:hashing" next to "use only imports, store" stops and reports a contradiction
         # (measured: nemotron, run d70792a6). Say which reading wins.
-        dropped = roster[size:]
-        roster = roster[:size]
-        cut_note = ('THIS RUN IS A REDUCED SWARM: the roster is only %s. Where the contract '
-                    'names other owners (%s) it describes the full-size swarm; in this run those '
-                    'regions have no owner, so write them yourself as frozen structure outside '
-                    'the blocks. Cut blocks only for the names listed above.\n'
-                    % (', '.join(roster), ', '.join(dropped)))
+        # Orphaning is what this note used to do - "those regions have no owner, write them
+        # yourself outside the blocks" - and run cd0d13f3 measured the result: the prototype
+        # cut two blocks and the fourteen unowned features shipped as empty panels. Distribute
+        # them instead, the way regroup_skeleton does for a skeleton: contiguous groups, one
+        # block per kept owner, every feature inside somebody's block.
+        roster, groups, judges = assign_groups(roster, size)
+        cut_note = ('THIS RUN IS A REDUCED SWARM: the roster is only %s, and every other feature '
+                    'the contract names is assigned to one of them. Cut exactly one block per '
+                    'name above, and put the whole of that assignment inside it:\n%s'
+                    'None of those features belongs outside a block, and no other name gets '
+                    'one. %s\n'
+                    % (', '.join(roster),
+                       ''.join('  part:%s covers %s\n' % (o, ', '.join(g)) for o, g in groups),
+                       ('The contract also names %s: in the full-size swarm they review rather '
+                        'than build, and in this run nobody plays them.' % ', '.join(judges))
+                       if judges else ''))
     root = Path(run.session_dir).resolve()
     out_name = spec.get('output_file', 'solution.py')
     suffix = Path(out_name).suffix or '.txt'
@@ -995,7 +1069,9 @@ def run_swarm(run, spec, warm, box):
     def brief(agent, workspace, task):
         # The mailbox is a snapshot taken now; the tools are how the agent sees what lands later.
         tools = coord.protocol(shown(board), agent) if coord.ENABLED else ''
-        return (common + budget_line(run, cap) + board_protocol(shown(board), agent, claim=False)
+        from swarm_workbench.adaptive import skill_context
+        skills, _ = skill_context(spec, agent)
+        return (common + skills + '\n' + budget_line(run, cap) + board_protocol(shown(board), agent, claim=False)
                 + tools
                 + 'YOUR WORKSPACE (write your own files here, absolute): %s\n' % shown(workspace)
                 + 'YOUR ROLE: %s\n' % agent + task + mailbox(agent))
@@ -1029,9 +1105,13 @@ def run_swarm(run, spec, warm, box):
         'an output cap loses the whole turn when a single write is longer than that (measured: '
         'two prototypes died exactly there).\n'
         % (out_name, opener % 'NAME', closer % 'NAME', ', '.join(roster), cut_note, out_name))
-    # Two blocks is the floor for a real division of labour, but the size sweep runs the
-    # same brief with a roster of one, where one block IS the whole file.
-    need = 2 if len(roster) > 1 else 1
+    # Every owner needs its own block. The roster size IS the division of the contract -
+    # adaptive.plan sizes it at four features per owner - so a prototype that cuts fewer blocks
+    # than there are owners silently unowns whole features: measured on run cd0d13f3, where two
+    # blocks left fourteen features outside every owner and they shipped as empty panels.
+    # Accepting two blocks for a roster of four would make that assignment decoration.
+    # A roster of one is the sweep's near-solo end, where one block IS the whole file.
+    need = len(roster)
     proto, spans, draft = None, {}, ''
     # A brief past what one free model writes in one stream (spec 20: 2,000 lines, cline
     # cuts at twelve minutes, the nim loop at its step cap) has no prototype turn to give.
@@ -1043,8 +1123,10 @@ def run_swarm(run, spec, warm, box):
     for attempt in attempts:
         folder = (root / 'prototype' / ('try-%d' % attempt)).resolve()
         task = proto_task if attempt == 1 else (
-            proto_task + 'YOUR PREVIOUS ATTEMPT carried no usable blocks. The markers are not '
-            'decoration: without them no other agent has anything to own.\n')
+            proto_task + 'YOUR PREVIOUS ATTEMPT left %s without a block. The markers are not '
+            'decoration: a name with no block owns nothing, and every feature assigned to it '
+            'ships as empty structure. Cut one block for each name, no more and no fewer.\n'
+            % (', '.join(n for n in roster if n not in spans) or 'every name'))
         got = None
         try:
             got = peer_round(run, [AgentRequest('prototype', brief('prototype', folder, task),
@@ -1078,6 +1160,7 @@ def run_swarm(run, spec, warm, box):
         raise RuntimeError('the prototype produced no usable part blocks for the roster')
     draft_path = board / ('010--prototype' + suffix)
     draft_path.write_text(draft, encoding='utf-8')
+    run.__dict__['init_seconds'] = round(time.monotonic() - run.__dict__.get('swarm_started', time.monotonic()), 2)
 
     # 2. each owner rewrites its own block, and nothing else
     owners = [a for a in roster if a in spans]
@@ -1296,7 +1379,7 @@ def run_swarm(run, spec, warm, box):
         (output / 'test_acceptance.py').write_text(spec['tests'], encoding='utf-8')
         result, where = run_acceptance(run.adw_id, output)
         (output / 'test-output.txt').write_text(result.stdout + result.stderr, encoding='utf-8')
-        passed = result.returncode == 0
+        passed = result.returncode == 0 and (suffix != '.html' or usable.get(winner) is True)
         run.tracer.gate_row(ph.phase, 'acceptance', GateReport(
             passed=passed, violations=[] if passed else [result.stderr[-2000:]]), 1)
         trace(run, ph.phase.phase_id, 'gate_pass' if passed else 'gate_fail', 'acceptance',
