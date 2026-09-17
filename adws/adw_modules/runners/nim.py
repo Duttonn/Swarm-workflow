@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import re
 import subprocess
 import threading
@@ -38,7 +39,7 @@ from pathlib import Path
 
 from ..agents import _extract_json
 from ..agy_swarm import AgentFailed, AgentRequest, assign, close_job, new_job, terminate
-from .common import deliver, tool_event, usage
+from .common import AgentBudget, deliver, tool_event, usage
 
 
 def has_envelope(text):
@@ -50,9 +51,9 @@ def has_envelope(text):
         return False
 
 BASE = os.environ.get('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1')
-CONNECT_TIMEOUT = int(os.environ.get('SWARM_NIM_CONNECT_TIMEOUT', '900'))
-READ_TIMEOUT = int(os.environ.get('SWARM_NIM_READ_TIMEOUT', '300'))
-MAX_TOKENS = int(os.environ.get('SWARM_NIM_MAX_TOKENS', '16384'))
+CONNECT_TIMEOUT = int(os.environ.get('SWARM_NIM_CONNECT_TIMEOUT', '45'))
+READ_TIMEOUT = int(os.environ.get('SWARM_NIM_READ_TIMEOUT', '45'))
+MAX_TOKENS = int(os.environ.get('SWARM_NIM_MAX_TOKENS', '4096'))
 MAX_STEPS = int(os.environ.get('SWARM_NIM_MAX_STEPS', '60'))
 EFFORT = os.environ.get('SWARM_NIM_EFFORT', 'high')
 COMMAND_TIMEOUT = int(os.environ.get('SWARM_NIM_COMMAND_TIMEOUT', '180'))
@@ -287,9 +288,9 @@ class Overloaded(Exception):
     """A transient refusal worth retrying: 429, 5xx, or an in-band 503 data line."""
 
 
-RETRY_WAITS = (5, 15, 45, 90)   # 155 s in all: the solo run alone met 5 x 503 in ten minutes
+RETRY_WAITS = (2, 5)           # at most 7 seconds of transient retry waiting
 RATE_LIMIT_FACTOR = 4        # a 429 is a per-minute budget, not a hiccup: 20 s, 60 s, 180 s
-MAX_RETRY_WAIT = int(os.environ.get('SWARM_NIM_MAX_RETRY_WAIT', '600'))   # longer: a dead provider
+MAX_RETRY_WAIT = int(os.environ.get('SWARM_NIM_MAX_RETRY_WAIT', '20'))
 
 _gate = threading.Lock()
 _next_start = [0.0]
@@ -297,7 +298,18 @@ _interval = [MIN_INTERVAL]
 MAX_INTERVAL = 20.0
 
 
-def throttle():
+def remaining_time(req):
+    return getattr(req, '_deadline', float('inf')) - time.monotonic()
+
+
+def guarded_wait(req, cancel, seconds):
+    if seconds >= remaining_time(req):
+        raise RuntimeError('wall timeout would expire while waiting for the provider')
+    if cancel.wait(seconds):
+        raise RuntimeError('cancelled by the swarm while waiting for the provider')
+
+
+def throttle(req=None, cancel=None):
     """Space request starts across every agent thread in this process: the swarm shares one
     API key, so the per-minute budget is per swarm, not per agent. The spacing adapts the
     way TCP does: a refusal widens it by half, every accepted request narrows it a little,
@@ -308,7 +320,10 @@ def throttle():
         wait = _next_start[0] - now
         _next_start[0] = max(now, _next_start[0]) + _interval[0]
     if wait > 0:
-        time.sleep(wait)
+        if cancel is None:
+            time.sleep(wait)
+        else:
+            guarded_wait(req, cancel, wait)
 
 
 def accepted():
@@ -328,9 +343,12 @@ def one_turn_with_retries(req, history, raw, cancel):
     """Five owners starting at once are exactly when the free tier says 503; one refused
     turn must not cost the swarm a whole agent. Errors that are not transient (401, 404,
     400) pass straight through."""
+    rate_errors = 0
     for wait in RETRY_WAITS + (None,):
         try:
-            throttle()
+            throttle(req, cancel)
+            if cancel.is_set() or remaining_time(req) <= 0:
+                raise RuntimeError('cancelled or wall timeout before the API request')
             result = one_turn(req, history, raw, cancel)
             accepted()
             return result
@@ -338,50 +356,124 @@ def one_turn_with_retries(req, history, raw, cancel):
             if exc.code not in (429, 500, 502, 503, 504) or wait is None:
                 raise
             if exc.code == 429:
+                rate_errors += 1
                 retry_after = exc.headers.get('Retry-After') if exc.headers else None
                 wait = int(retry_after) if retry_after and retry_after.isdigit() \
                     else min(wait * RATE_LIMIT_FACTOR, 180)
-                if wait > MAX_RETRY_WAIT:
+                if wait > MAX_RETRY_WAIT or rate_errors >= 2:
                     # Token Harbor answers an exhausted weekly allowance with Retry-After 3600
                     # and a body naming the next period: a dead provider, not a queue
                     try:
                         body = exc.read().decode('utf-8', 'replace')[:300]
                     except Exception:
                         body = ''
-                    raise AgentFailed('%s: the provider asks for a %ds wait (%s)'
+                    raise AgentFailed('%s: repeated rate limit or the provider asks for a %ds wait (%s)'
                                       % (getattr(req, 'agent', '?'), wait, body or 'no body'))
                 cool_down(wait)
             raw.write(json.dumps({'retry': 'HTTP %s' % exc.code, 'wait': wait}) + '\n')
         except Overloaded as exc:
-            if wait is None:
+            if wait is None or any(x in str(exc).lower() for x in
+                                   ('quota', 'credit', 'free_tier_limit', '429', '402')):
                 raise
             raw.write(json.dumps({'retry': str(exc), 'wait': wait}) + '\n')
         raw.flush()
-        if cancel.wait(wait):
-            raise RuntimeError('cancelled by the swarm while waiting to retry')
+        guarded_wait(req, cancel, wait)
+
+
+def response_lines(request, req, cancel):
+    """Bound waiting independently of SSE heartbeats and socket read timeouts.
+
+    The daemon owns/ closes the HTTP response. No background thread writes run files.
+    A timeout can cancel local work but cannot prove the provider stopped billing it.
+    """
+    received, stopped = queue.Queue(), threading.Event()
+    first = min(CONNECT_TIMEOUT, float(os.environ.get('SWARM_FIRST_OUTPUT_TIMEOUT', '45')))
+    idle = min(READ_TIMEOUT, float(os.environ.get('SWARM_IDLE_TIMEOUT', '45')))
+    started, last_work = time.monotonic(), None
+    socket_ref = []
+
+    def read():
+        try:
+            with urllib.request.urlopen(request, timeout=max(.01, min(first, remaining_time(req)))) as response:
+                try:
+                    sock = response.fp.raw._sock
+                    socket_ref.append(sock)
+                    sock.settimeout(min(first, idle))
+                except AttributeError:
+                    pass
+                for line in response:
+                    if stopped.is_set():
+                        break
+                    received.put(line)
+        except Exception as exc:
+            received.put(exc)
+        finally:
+            received.put(None)
+
+    threading.Thread(target=read, daemon=True).start()
+    try:
+        while True:
+            now = time.monotonic()
+            if cancel.is_set():
+                raise RuntimeError('cancelled by the swarm during the API request')
+            if remaining_time(req) <= 0:
+                raise RuntimeError('wall timeout during the API request')
+            if last_work is None and now - started >= first:
+                raise RuntimeError('no meaningful API output after %ss' % first)
+            if last_work is not None and now - last_work >= idle:
+                raise RuntimeError('idle API stream for %ss' % idle)
+            try:
+                line = received.get(timeout=.05)
+            except queue.Empty:
+                continue
+            if line is None:
+                break
+            if isinstance(line, Exception):
+                raise line
+            decoded = line.decode('utf-8', 'replace').strip()
+            if decoded.startswith('data:'):
+                try:
+                    event = json.loads(decoded[5:].strip())
+                    if any(any((c.get('delta') or {}).get(k) for k in
+                               ('content', 'reasoning_content', 'reasoning', 'tool_calls'))
+                           for c in event.get('choices') or []):
+                        last_work = time.monotonic()
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            yield line
+    finally:
+        stopped.set()
+        for sock in socket_ref:
+            try:
+                import socket
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
 
 
 def one_turn(req, history, raw, cancel):
     """One streamed completion. Returns (text, [tool call], finish_reason, usage delta)."""
-    body = {'model': req.model, 'messages': history, 'tools': TOOLS, 'max_tokens': MAX_TOKENS,
+    budget = getattr(req, '_agent_budget', None)
+    max_tokens = budget.allocate({'messages': history, 'tools': TOOLS}, MAX_TOKENS) if budget else MAX_TOKENS
+    body = {'model': req.model, 'messages': history, 'tools': TOOLS, 'max_tokens': max_tokens,
             'temperature': 1, 'stream': True, 'stream_options': {'include_usage': True}}
     if EFFORT:
         body['reasoning_effort'] = EFFORT
+    headers = {'Content-Type': 'application/json', 'Accept': 'text/event-stream'}
+    if os.environ.get('SWARM_OPENAI_ANONYMOUS') == '1':
+        if BASE.rstrip('/') != 'https://api.kilo.ai/api/gateway' or not req.model.endswith(':free'):
+            raise RuntimeError('anonymous API requires the Kilo gateway and an explicit :free model')
+    else:
+        headers['Authorization'] = 'Bearer ' + api_key()
     request = urllib.request.Request(
         BASE.rstrip('/') + '/chat/completions', method='POST',
         data=json.dumps(body).encode('utf-8'),
-        headers={'Authorization': 'Bearer ' + api_key(), 'Content-Type': 'application/json',
-                 'Accept': 'text/event-stream'})
+        headers=headers)
     texts, calls, finish, used = [], {}, None, {}
     started = time.time()
-    with urllib.request.urlopen(request, timeout=CONNECT_TIMEOUT) as response:
-        # urlopen's timeout becomes the socket timeout for the whole stream; once the first
-        # byte is here a long silence is a dead stream, not a queue.
-        try:
-            response.fp.raw._sock.settimeout(READ_TIMEOUT)
-        except AttributeError:
-            pass
-        for line in response:
+    lines = response_lines(request, req, cancel)
+    try:
+        for line in lines:
             if cancel.is_set():
                 raise RuntimeError('cancelled by the swarm after %.0fs' % (time.time() - started))
             line = line.decode('utf-8', 'replace').strip()
@@ -410,24 +502,30 @@ def one_turn(req, history, raw, cancel):
                     texts.append(delta['content'])
                 if delta.get('tool_calls'):
                     merge_delta(calls, delta['tool_calls'])
+    finally:
+        lines.close()
     return ''.join(texts), [calls[i] for i in sorted(calls)], finish, used
 
 
 def invoke(req: AgentRequest, messages, cancel):
-    history = [{'role': 'user', 'content': req.prompt}]
+    budget = AgentBudget(req)
+    req._agent_budget = budget
+    budget.publish(messages)
+    history = [{'role': 'user', 'content': req.prompt + budget.note()}]
     total = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
     texts, error, steps, tool_steps, nudged = [], None, 0, 0, 0
     # The CLI runners get their deadline from watch(); this loop owns its own, so a model that
     # keeps calling tools cannot outlive the call budget the swarm allocated it.
-    deadline = time.time() + req.timeout
+    req._deadline = time.monotonic() + req.timeout
     req.job = new_job()
     with (req.folder / 'events.jsonl').open('w', encoding='utf-8') as raw:
         while steps < MAX_STEPS:
-            if time.time() > deadline:
+            if cancel.is_set() or remaining_time(req) <= 0:
                 error = 'out of time after %d tool steps (%ss budget)' % (steps, req.timeout)
                 break
             steps += 1
             try:
+                budget.allocate({'messages': history, 'tools': TOOLS}, MAX_TOKENS)
                 text, calls, finish, used = one_turn_with_retries(req, history, raw, cancel)
             except urllib.error.HTTPError as exc:
                 error = 'HTTP %s: %s' % (exc.code, exc.read().decode('utf-8', 'replace')[:300])
@@ -440,6 +538,11 @@ def invoke(req: AgentRequest, messages, cancel):
                 break
             for key in total:
                 total[key] += (used or {}).get(key) or 0
+            budget.record(used, {'messages': history, 'tools': TOOLS}, {'text': text, 'calls': calls})
+            budget.publish(messages)
+            if budget.total > budget.limit or budget.output > budget.output_limit:
+                error = 'token budget exceeded after API usage accounting'
+                break
             if text:
                 texts.append(text)
             if not calls:
@@ -486,6 +589,9 @@ def invoke(req: AgentRequest, messages, cancel):
                  'function': {'name': c['name'], 'arguments': c['arguments']}}
                 for i, c in enumerate(calls)]})
             for i, call in enumerate(calls):
+                if cancel.is_set() or remaining_time(req) <= 0:
+                    error = 'cancelled or wall timeout before tool execution'
+                    break
                 try:
                     args = json.loads(call['arguments'] or '{}')
                 except json.JSONDecodeError:
@@ -498,14 +604,16 @@ def invoke(req: AgentRequest, messages, cancel):
                 tool_event(messages, req, call['name'], {'parameters': {
                     k: str(v)[:120] for k, v in args.items() if k in ('path', 'command')}})
                 history.append({'role': 'tool', 'tool_call_id': call['id'] or ('call_%d' % i),
-                                'content': result})
+                                'content': result + budget.note()})
         else:
             error = 'gave up after %d tool steps without a final answer' % MAX_STEPS
     close_job(req.job)
     req.job = None
-    used = usage('nim', req.model, total=total['total_tokens'] or None,
+    used = usage('nim', req.model, total=budget.total if steps else None,
                  input=total['prompt_tokens'] or None, output=total['completion_tokens'] or None,
-                 cost=0.0)
+                 cost=None)
+    used['usage_status'] = budget.status
+    used['output_tokens'] = budget.output if budget.status != 'unknown' else None
     if not error and not any(t.strip() for t in texts):
         error = 'produced no reply text in %d steps' % steps
     return deliver(req, texts, used, error, steps=steps)
