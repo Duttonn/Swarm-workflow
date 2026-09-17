@@ -22,6 +22,11 @@ def main():
     parser.add_argument('--warm')
     args = parser.parse_args()
     spec = json.loads(Path(args.spec).read_text(encoding='utf-8'))
+    # Role skills are chosen once, before launch, by bench/role_skills.py; the swarm only reads
+    # that decision. Nothing was reading it, so every plan so far shipped `skills: []`.
+    sidecar = Path('work/role-skills') / (Path(args.spec).stem + '.json')
+    if 'role_skills' not in spec and sidecar.is_file():
+        spec['role_skills'] = json.loads(sidecar.read_text(encoding='utf-8')).get('role_skills') or {}
     for key in ('prompt','definition_of_done','contract','tests'):
         if not spec.get(key):
             raise ValueError(f'{key} is required before launching agents')
