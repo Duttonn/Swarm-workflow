@@ -10,6 +10,7 @@ disposes.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -261,7 +262,41 @@ def _extract_json(text: str) -> dict:
     start, end = candidate.find("{"), candidate.rfind("}")
     if start == -1 or end <= start:
         raise ValueError("no JSON object found in the response")
-    return json.loads(candidate[start:end + 1])
+    try:
+        return json.loads(candidate[start:end + 1])
+    except json.JSONDecodeError as error:
+        salvaged = _salvage_envelope(candidate[start:end + 1])
+        if salvaged is None:
+            raise error
+        return salvaged
+
+
+ENVELOPE_KEYS = ("status", "summary", "code", "decisions", "risks", "artifacts",
+                 "notes_for_next_agent")
+
+
+def _field(text: str, key: str) -> Optional[str]:
+    """The raw text of one string field, read up to the next envelope key or the closing
+    brace, so an unescaped quote inside it does not end it."""
+    found = re.search(r'"%s"\s*:\s*"(.*?)"\s*(?:,\s*"(?:%s)"\s*:|\s*}\s*$)'
+                      % (key, "|".join(ENVELOPE_KEYS)), text, re.S)
+    if not found:
+        return None
+    raw = found.group(1)
+    try:
+        return json.loads('"' + raw + '"')
+    except json.JSONDecodeError:
+        return raw
+
+
+def _salvage_envelope(text: str) -> Optional[dict]:
+    """An envelope whose strings hold unescaped quotes (a long summary quoting code) is
+    still an envelope: keep status, summary and code, drop the lists. None without a status."""
+    status = re.search(r'"status"\s*:\s*"([a-z]+)"', text, re.I)
+    if not status:
+        return None
+    return {"status": status.group(1), "summary": (_field(text, "summary") or "")[:4000],
+            "code": _field(text, "code") or "", "salvaged": True}
 
 
 def _parse_with_retries(run, phase: Phase, call: AgentCall, result, send):
