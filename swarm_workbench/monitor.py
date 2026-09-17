@@ -4,6 +4,7 @@ Read-only. Never writes to the trace db, so it is safe against a running swarm.
 """
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 import sys
@@ -13,11 +14,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ESC = '\033['
-DIM, BOLD, RESET = ESC + '2m', ESC + '1m', ESC + '0m'
-RED, GREEN, YELLOW, CYAN = (ESC + c + 'm' for c in ('31', '32', '33', '36'))
-STATUS_COLOR = {'success': GREEN, 'running': CYAN, 'fail': RED, 'failed': RED, 'skipped': DIM}
-KIND_COLOR = {'tool_call': YELLOW, 'peer_message': CYAN, 'gate_pass': GREEN,
-              'gate_fail': RED, 'error': RED, 'artifact': GREEN}
+# The web UI's palette, in the terminal's 16 colours: green is the swarm and a
+# pass, blue is running, amber a post or a stale run, red a failure, grey labels.
+DIM, BOLD, RESET = ESC + '90m', ESC + '1m', ESC + '0m'
+RED, GREEN, YELLOW, BLUE = (ESC + c + 'm' for c in ('31', '32', '33', '34'))
+CYAN = BLUE  # kept for callers that import the old name
+STATUS_COLOR = {'success': GREEN, 'running': BLUE, 'fail': RED, 'failed': RED, 'skipped': DIM}
+KIND_COLOR = {'tool_call': RESET, 'peer_message': YELLOW, 'board_post': YELLOW,
+              'gate_pass': GREEN, 'gate_fail': RED, 'error': RED, 'artifact': GREEN}
 
 
 def connect(db):
@@ -96,7 +100,6 @@ def render_run(con, run_id, width, tail):
                            (run_id,)).fetchone()
     limits = ''
     if contract:
-        import json
         payload = json.loads(contract['payload_json'] or '{}')
         cap = payload.get('limits', {})
         limits = (f'{DIM}model {payload.get("model", "?")} | max {cap.get("agents", "?")} agents '
@@ -150,17 +153,25 @@ def render_run(con, run_id, width, tail):
     if not agents:
         lines.append(f'  {DIM}no agents registered{RESET}')
 
-    lines += ['', f'{BOLD}TRACE{RESET} {DIM}(latest {tail}){RESET}']
+    # The same four columns as the web monitor: time | agent | tool | argument.
+    lines += ['', f'{BOLD}MONITOR{RESET} {DIM}(latest {tail})  time  agent  tool  argument{RESET}']
     rows = con.execute('SELECT * FROM events WHERE adw_id=? ORDER BY rowid DESC LIMIT ?',
                        (run_id, tail)).fetchall()
     for ev in reversed(rows):
-        kcolor = KIND_COLOR.get(ev['type'], DIM)
+        payload = json.loads(ev['payload_json'] or '{}')
         stamp = (str(ev['started_at'] or '')[11:19]) or '--:--:--'
         owner = con.execute('SELECT owner FROM phases WHERE phase_id=?',
                             (ev['phase_id'],)).fetchone()
-        who = (owner['owner'] if owner else 'system') or 'system'
-        lines.append(f'  {DIM}{stamp}{RESET} {who:<12}{kcolor}{ev["type"]:<14}{RESET}'
-                     f'{clip(ev["name"], max(10, width - 45))}')
+        who = payload.get('agent') or (owner['owner'] if owner else '') or 'system'
+        if ev['type'] == 'tool_call':
+            info = payload.get('tool_info') or payload
+            params = info.get('parameters') or {}
+            tool, arg = ev['name'] or 'tool', next((str(params[k]) for k in params), '')
+            tcolor = RESET
+        else:
+            tool, arg, tcolor = ev['type'], ev['name'] or '', KIND_COLOR.get(ev['type'], DIM)
+        lines.append(f'  {DIM}{stamp}{RESET} {GREEN}{clip(who, 14):<15}{RESET}'
+                     f'{tcolor}{clip(tool, 18):<19}{RESET}{DIM}{clip(arg, max(10, width - 48))}{RESET}')
     return lines
 
 
@@ -205,7 +216,6 @@ def run(db, run_id, interval, limit, tail, once):
 
 def demo():
     """Self-check: build a trace in memory and assert the renderers read it back."""
-    import json
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / 'demo.db'
@@ -256,7 +266,9 @@ def demo():
         assert '271,318' in overview, overview
         assert 'THREADS' in detail and 'builder_r1' in detail, detail
         assert 'AGENTS' in detail and 'live' in detail, detail
-        assert 'TRACE' in detail and 'tool_call' in detail, detail
+        # The monitor lists the tool, not the event type, in the web UI's columns.
+        assert 'MONITOR' in detail and 'finish' in detail and 'tool_call' not in detail, detail
+        assert f'{GREEN}builder' in detail, detail
         assert 'gemini-3.8-flash-medium' in detail, detail
         assert 'unknown run' in missing, missing
         # A read-only handle must refuse writes even if a caller tries.
