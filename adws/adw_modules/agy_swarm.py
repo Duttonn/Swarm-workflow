@@ -1358,7 +1358,12 @@ def run_swarm(run, spec, warm, box):
                'output': (outcome.stdout + outcome.stderr)[-2000:]})
     order = [name for name, _ in reversed(candidates)]
     # tests decide; among test-passing candidates the one whose page also works wins
+    # A candidate the gate could not judge at all is worse than one judged and imperfect.
+    # Measured on run 65ba13c8: the finisher's page hung the headless browser until the
+    # 300s timeout, so its verdict was None, and it still won the fallback over an assembly
+    # whose sixteen panels were all populated. A page nobody can open is not the better page.
     winner = next((name for name in order if graded[name] and usable[name]), None) \
+        or next((name for name in order if graded[name] and usable[name] is not None), None) \
         or next((name for name in order if graded[name]), order[0])
     shipped = dict(candidates)[winner]
     print('shipping the %s candidate (%s)'
