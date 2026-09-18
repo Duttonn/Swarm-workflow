@@ -20,7 +20,11 @@ from .agents import _extract_json
 from . import coord, ui_gate
 from .data_types import EnvelopeBase, EventRecord, Phase, PhaseParams, GateReport
 from .docker_sandbox import SwarmSandbox, SandboxUnavailable, docker_ready
-from swarm_workbench.adaptive import REVIEWERS
+# The roster split and the planner must agree on which names judge rather than build, so the
+# list has one home. bench scripts put only adws/ on the path, so make the repo root
+# importable here rather than in every caller (measured: bench/check_runner.py broke).
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+from swarm_workbench.adaptive import REVIEWERS  # noqa: E402
 from .utils import now_iso
 
 # Gemini CLI is the default runner: it bills per token against an API key, where agy bills a
