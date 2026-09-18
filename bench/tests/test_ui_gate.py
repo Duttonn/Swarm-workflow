@@ -1,6 +1,7 @@
 """The browser gate: an empty panel and a mount error are found, a drawn page passes."""
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -26,9 +27,11 @@ class Gate(unittest.TestCase):
         return p
 
     def test_a_drawn_page_passes(self):
+        started = time.perf_counter()
         v = ui_gate.judge(self.page(
             'document.getElementById("panel-a").innerHTML += "<button>go</button>";'
             'document.getElementById("panel-b").innerHTML += "<p>some content to read here</p>";'))
+        self.assertLess(time.perf_counter() - started, 10)
         self.assertTrue(v['ok'], v)
         self.assertEqual(v['empty_panels'], [])
 
@@ -42,6 +45,47 @@ class Gate(unittest.TestCase):
         defects = agy_swarm.ui_defects(agy_swarm.page_verdict(self.dir / 'x.html', '.html'))
         self.assertTrue(any(d.startswith('ui: page throws') for d in defects), defects)
         self.assertTrue(any(d.startswith('part:b - the panel renders EMPTY') for d in defects), defects)
+
+    def test_a_hidden_application_is_rejected(self):
+        v = ui_gate.judge(self.page(
+            'document.body.style.display = "none";'))
+        self.assertFalse(v['ok'], v)
+
+    def test_a_disabled_control_does_not_fill_a_panel(self):
+        v = ui_gate.judge(self.page(
+            'document.getElementById("panel-a").innerHTML += "<button disabled>go</button>";'
+            'document.getElementById("panel-b").innerHTML += "<p>some content to read here</p>";'))
+        self.assertFalse(v['ok'], v)
+        self.assertIn('a', v['empty_panels'])
+
+    def test_a_visible_empty_panel_is_rejected(self):
+        v = ui_gate.judge(self.page(
+            'document.getElementById("panel-b").innerHTML += "<p>some content to read here</p>";'))
+        self.assertFalse(v['ok'], v)
+        self.assertIn('a', v['empty_panels'])
+
+    def test_an_offscreen_control_does_not_fill_a_panel(self):
+        v = ui_gate.judge(self.page(
+            'document.getElementById("panel-a").innerHTML += '
+            '"<button style=\\"position:fixed;left:-10000px\\">go</button>";'
+            'document.getElementById("panel-b").innerHTML += "<p>some content to read here</p>";'))
+        self.assertFalse(v['ok'], v)
+        self.assertIn('a', v['empty_panels'])
+
+    def test_hidden_inactive_tabs_do_not_fail_the_current_panel(self):
+        page = self.page(
+            'document.getElementById("panel-a").innerHTML += "<button>go</button>";'
+            'document.getElementById("panel-b").innerHTML += "<p>some content to read here</p>";'
+            'document.getElementById("panel-b").hidden = true;'
+            'document.querySelectorAll("[data-tab]").forEach(tab => tab.onclick = () => {'
+            'document.getElementById("panel-a").hidden = tab.dataset.tab !== "a";'
+            'document.getElementById("panel-b").hidden = tab.dataset.tab !== "b";});')
+        scenario = ('document.querySelector("[data-tab=b]").click(); '
+                    'await new Promise(r => setTimeout(r, 50)); '
+                    'return {steps: [{name: "switch tabs", ok: !document.getElementById("panel-b").hidden}]};')
+        v = ui_gate.judge(page, scenario)
+        self.assertTrue(v['ok'], v)
+        self.assertEqual([p['panel'] for p in v['panels']], ['b', 'a'])
 
     def test_a_scenario_step_that_fails_is_a_defect(self):
         page = self.page('document.getElementById("panel-a").innerHTML += "<button id=go>go</button>";'

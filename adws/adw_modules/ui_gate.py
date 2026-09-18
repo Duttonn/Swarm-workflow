@@ -28,6 +28,86 @@ HOOK = ('<script>window.__errs=[];window.alert=function(){};window.confirm=funct
         'String(e.message).slice(0,200));document.documentElement.setAttribute("data-errs",'
         'JSON.stringify(window.__errs))});</script>')
 
+# `--dump-dom` serializes markup, not the rendered page.  Inspect in the browser after mount
+# and any scenario instead: CSS and geometry are the only reliable way to tell whether a person
+# can see and use a panel's contents.
+INSPECTOR = '''<script>(function(){
+var queuedAt = performance.now();
+function rendered(el) {
+  for (var node = el; node && node.nodeType === 1; node = node.parentElement) {
+    var style = getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' ||
+        Number(style.opacity) === 0 || node.hidden || node.getAttribute('aria-hidden') === 'true') return false;
+  }
+  return el.getClientRects().length > 0;
+}
+function inViewport(rect) {
+  return rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.bottom > 0 &&
+    rect.left < window.innerWidth && rect.top < window.innerHeight;
+}
+function visible(el) {
+  return rendered(el) && Array.prototype.some.call(el.getClientRects(), inViewport);
+}
+function visibleText(panel, heading) {
+  var chars = 0;
+  var walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
+  for (var text = walker.nextNode(); text; text = walker.nextNode()) {
+    if (!text.nodeValue.trim() || (heading && heading.contains(text.parentElement))) continue;
+    var parent = text.parentElement;
+    if (!parent || parent.closest('button,input,select,textarea,svg,canvas') || !visible(parent)) continue;
+    var range = document.createRange(); range.selectNodeContents(text);
+    if (Array.prototype.some.call(range.getClientRects(), inViewport)) chars += text.nodeValue.replace(/\\s+/g, ' ').trim().length;
+  }
+  return chars;
+}
+function inspect() {
+  var startedAt = performance.now();
+  var panels = [], seen = {};
+  function collectShownPanels() {
+    Array.prototype.forEach.call(document.querySelectorAll('section[id^="panel-"]'), function(panel) {
+      if (!rendered(panel) || seen[panel.id]) return;
+      // A tab panel is evaluated only while its tab has made it visible.
+      seen[panel.id] = true;
+      var controls = 0;
+      Array.prototype.forEach.call(panel.querySelectorAll('button,input,select,textarea,svg,canvas'), function(control) {
+        if (!control.matches(':disabled') && visible(control)) controls++;
+      });
+      var chars = visibleText(panel, panel.querySelector('h1,h2,h3,h4,h5,h6'));
+      panels.push({panel: panel.id.slice(6), controls: controls, chars: chars,
+                   empty: controls === 0 && chars < 12});
+    });
+  }
+  collectShownPanels();
+  // Inactive panels normally have display:none.  Show each tab first so the gate measures
+  // its own content rather than treating an intentionally hidden tab as a dead panel.
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function(tab) {
+    if (!visible(tab) || tab.matches(':disabled')) return;
+    var target = document.getElementById('panel-' + tab.getAttribute('data-tab'));
+    if (!target) return;
+    // Let a tab's click handler reveal its panel, but prevent a link's native navigation
+    // from replacing the page while it is being inspected.
+    var preventDefault = function(event) { event.preventDefault(); };
+    tab.addEventListener('click', preventDefault, true);
+    try { tab.click(); } finally { tab.removeEventListener('click', preventDefault, true); }
+    if (target && rendered(target)) collectShownPanels();
+    else if (target && !seen[target.id]) {
+      // The tab did not reveal its panel.  Its DOM cannot stand in for a panel a person can see.
+      seen[target.id] = true;
+      panels.push({panel: target.id.slice(6), controls: 0, chars: 0, empty: true});
+    }
+  });
+  var tabs = 0;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function(tab) { if (visible(tab)) tabs++; });
+  document.documentElement.setAttribute('data-ui-gate', JSON.stringify({
+    panels: panels, tabs: tabs, queued_ms: Math.round(startedAt - queuedAt),
+    inspect_ms: Math.round(performance.now() - startedAt)
+  }));
+}
+// Seed starts at 400 ms and a scenario starts at 900 ms.  Waiting just past that startup
+// point keeps the inspector out of the virtual-time tail that made a simple page hang.
+setTimeout(inspect, 1200);
+})();</script>'''
+
 
 def browser():
     for candidate in BROWSERS:
@@ -76,7 +156,7 @@ def dump(page, scenario=None):
     raw = Path(page).read_text(encoding='utf-8', errors='replace')
     hooked = re.sub(r'(<head[^>]*>)', r'\1' + HOOK, raw, count=1, flags=re.I) if re.search(r'<head', raw, re.I) \
         else HOOK + raw
-    seed = seed_script(page) + scenario_script(scenario)
+    seed = seed_script(page) + scenario_script(scenario) + INSPECTOR
     hooked = hooked.replace('</body>', seed + '</body>', 1) if '</body>' in hooked else hooked + seed
     with tempfile.TemporaryDirectory(prefix='ui-gate-') as tmp:
         copy = Path(tmp) / Path(page).name
@@ -84,6 +164,11 @@ def dump(page, scenario=None):
         argv = [browser(), '--headless=new', '--disable-gpu', '--no-sandbox',
                 '--virtual-time-budget=12000', '--user-data-dir=' + str(Path(tmp) / 'profile'),
                 '--dump-dom', copy.as_uri()]
+        # A page is judged once per candidate. What bounds the inspector is its own
+        # deadline above, not a tight wall clock here: a cold first launch on Windows
+        # takes far longer than a warm one (measured at HEAD, same page, same process:
+        # 60s, then 1.8s, then 1.5s), so the first attempt is cut short and the retry
+        # gets the real ceiling.
         limit = int(os.environ.get('SWARM_GATE_TIMEOUT', '300'))
         for attempt in (1, 2):
             try:
@@ -122,18 +207,15 @@ def judge(page, scenario=None):
         if not steps:
             steps = [{'name': 'scenario produced no result', 'ok': False, 'note': ''}]
     failed_steps = [s for s in steps if not s.get('ok')]
-    panels = []
-    for m in re.finditer(r'<section[^>]*id="panel-([\w-]+)"[^>]*>(.*?)</section>', dom, re.S | re.I):
-        name, body = m.group(1), m.group(2)
-        controls = len(re.findall(r'<(button|input|select|textarea|svg|canvas)\b', body, re.I))
-        # a panel is empty when, past its own heading, a person finds neither a control nor
-        # a dozen characters of content ("Tags #project (2)" is a rendered tag list)
-        headless = re.sub(r'<h[1-6][^>]*>.*?</h[1-6]>', ' ', body, count=1, flags=re.S | re.I)
-        text = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', headless)).strip()
-        panels.append({'panel': name, 'controls': controls, 'chars': len(text),
-                       'empty': controls == 0 and len(text) < 12})
-    tabs = len(re.findall(r'data-tab="', dom))
+    report = re.search(r'data-ui-gate="([^"]*)"', dom)
+    try:
+        visible = json.loads(unescape(report.group(1))) if report else {}
+    except ValueError:
+        visible = {}
+    panels = visible.get('panels') or []
+    tabs = visible.get('tabs', 0)
     return {'page': str(page), 'tabs': tabs, 'panels': panels, 'errors': errors,
+            'queued_ms': visible.get('queued_ms'), 'inspect_ms': visible.get('inspect_ms'),
             'empty_panels': [p['panel'] for p in panels if p['empty']],
             'steps': steps, 'failed_steps': failed_steps,
             'ok': bool(panels) and not errors and not any(p['empty'] for p in panels) and not failed_steps}
