@@ -629,6 +629,21 @@ def trace(run, phase_id, kind, name, payload):
                                        type=kind, name=name, payload=payload))
 
 
+# Failures that no retry, no later round and no other agent on the same provider can get
+# past, so the swarm stops at the first one instead of running its remaining rounds dead.
+# Measured on run fbb3cd41: cline reported "Error 429: Daily free limit reached on model ..."
+# and none of the words below matched it ("daily limit", "http 429"), so the swarm kept
+# launching rounds, reviews and a finisher for forty minutes against a closed quota.
+STOP_WORDS = ('insufficient balance', 'daily limit', 'daily free limit', 'inference_cap_error',
+              'quota exceeded', 'rate limit', 'http 429', 'error 429', 'unauthorized', 'http 401',
+              'no meaningful', 'idle timeout', 'first output', 'wall-time budget')
+
+
+def stops_the_swarm(message):
+    reason = (message or '').lower()
+    return any(word in reason for word in STOP_WORDS)
+
+
 def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate=True):
     """All DB writes stay on the owner thread. Children only queue stream events."""
     if run.__dict__.get('swarm_stop'):
@@ -768,10 +783,7 @@ def peer_round(run, requests, round_index, started=None, cap=0, board=None, gate
                         run.__dict__['usage_unknown'] = True
                     ph.status='fail'; ph.error=str(exc); failures.append(str(exc))
                     trace(run, ph.phase_id, 'error', req.agent, {'error':str(exc)})
-                    reason = str(exc).lower()
-                    if any(word in reason for word in ('insufficient balance', 'daily limit', 'quota exceeded',
-                            'rate limit', 'http 429', 'unauthorized', 'http 401', 'no meaningful',
-                            'idle timeout', 'first output', 'wall-time budget')):
+                    if stops_the_swarm(str(exc)):
                         run.__dict__['swarm_stop'] = str(exc)[:500]
                         cancel.set()
                         trace(run, '', 'log', 'swarm_stop', {'stop_reason': run.swarm_stop})

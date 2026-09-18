@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'adws'))
 from swarm_workbench import adaptive  # noqa: E402
-from adw_modules.agy_swarm import assign_groups  # noqa: E402
+from adw_modules.agy_swarm import assign_groups, stops_the_swarm  # noqa: E402
 
 SPEC = {'prompt': 'Build a board', 'contract': 'c', 'tests': 'def test_a():\n' * 18,
         'output_file': 'x.html', 'ui_scenario': 's',
@@ -97,6 +97,19 @@ class Objective(unittest.TestCase):
         rows = [dict(r, whole_file_model='other') for r in self.records()]
         plan = adaptive.plan(SPEC, 'cline', 'free', rows, None, 5)
         self.assertEqual(plan['source_runs'], [], 'a different prototype model is a different run')
+
+
+class ProviderStop(unittest.TestCase):
+    """The exact text cline printed on run fbb3cd41, which the old word list let through."""
+
+    def test_a_daily_free_limit_stops_the_swarm(self):
+        msg = ('cards: cline exit=1 finish=error: {"error":{"code":"INFERENCE_CAP_ERROR","message":'
+               '"Error 429: Daily free limit reached on model meta/muse-spark-1.3-contributor. '
+               'Try again in 17h 59m"}}')
+        self.assertTrue(stops_the_swarm(msg))
+
+    def test_an_ordinary_agent_error_does_not(self):
+        self.assertFalse(stops_the_swarm('cards: cline exit=1 finish=error: Stream error occurred'))
 
 
 if __name__ == '__main__':
