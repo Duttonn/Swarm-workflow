@@ -1,8 +1,10 @@
 """The role-skill chooser, with the catalogue stubbed: no network, no install, in this test."""
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'bench'))
@@ -82,6 +84,61 @@ class Output(unittest.TestCase):
         self.assertEqual(sorted(sidecar['role_skills']), ['*', 'alpha'])
         self.assertNotIn('role_skills', json.loads(spec_path.read_text(encoding='utf-8')))
         spec_path.unlink()
+
+
+class Scout(unittest.TestCase):
+    """The scout boundary is stubbed: catalogue, runner, and install stay offline."""
+    CANDIDATES = [('o/r@plain-html', 12), ('o/r@react-kanban', 4000)]
+
+    def run_scout(self, code):
+        sys.path.insert(0, str(ROOT / 'adws'))
+        from adw_modules import agy_swarm
+        spec = {'prompt': 'Build a no-library page', 'contract': 'one HTML file; no libraries',
+                'agents': ['cards', 'skeptic'],
+                'context': {'language': 'html', 'platform': 'browser'}}
+        with tempfile.TemporaryDirectory() as scratch:
+            spec_path = Path(scratch) / 'scout-spec.json'
+            spec_path.write_text(json.dumps(spec), encoding='utf-8')
+            sidecar = role_skills.OUT_DIR / (spec_path.stem + '.json')
+            calls, installs = [], []
+            original_catalog, original_installed = role_skills.catalog, role_skills.installed
+            original_install, original_invoke = role_skills.install, agy_swarm.invoke
+            role_skills.catalog = lambda query, timeout=180: calls.append(query) or self.CANDIDATES
+            role_skills.installed = lambda: {}
+            role_skills.install = lambda package: installs.append(package) or True
+            agy_swarm.invoke = lambda req, messages, cancel: (SimpleNamespace(code=code), {})
+            try:
+                self.assertEqual(role_skills.main(['role_skills.py', str(spec_path), '--scout']), 0)
+                result = json.loads(sidecar.read_text(encoding='utf-8'))
+            finally:
+                role_skills.catalog, role_skills.installed = original_catalog, original_installed
+                role_skills.install, agy_swarm.invoke = original_install, original_invoke
+                if sidecar.exists():
+                    sidecar.unlink()
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(installs, [])
+        return result
+
+    def test_null_scout_answer_yields_no_role_skill(self):
+        result = self.run_scout('{"skill": null, "reason": "Neither candidate fits."}')
+        self.assertNotIn('cards', result['role_skills'])
+        self.assertIsNone(result['chosen'][0]['skill'])
+
+    def test_scout_cannot_invent_a_skill_outside_candidates(self):
+        result = self.run_scout('{"skill": "other/repo@invented", "reason": "Use this."}')
+        self.assertNotIn('cards', result['role_skills'])
+        self.assertIn('outside the catalogue candidates', result['chosen'][0]['reason'])
+
+    def test_malformed_scout_json_yields_no_skill_without_crashing(self):
+        result = self.run_scout('not JSON')
+        self.assertNotIn('cards', result['role_skills'])
+        self.assertEqual(result['chosen'][0]['reason'], 'Scout response was not valid JSON.')
+
+    def test_scout_sidecar_records_reason_and_provenance(self):
+        result = self.run_scout('{"skill": "o/r@plain-html", "reason": "It matches the no-library HTML contract."}')
+        chosen = result['chosen'][0]
+        self.assertEqual(chosen['reason'], 'It matches the no-library HTML contract.')
+        self.assertEqual(chosen['by'], 'scout')
 
 
 if __name__ == '__main__':
