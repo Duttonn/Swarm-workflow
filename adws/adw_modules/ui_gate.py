@@ -84,8 +84,23 @@ def dump(page, scenario=None):
         argv = [browser(), '--headless=new', '--disable-gpu', '--no-sandbox',
                 '--virtual-time-budget=12000', '--user-data-dir=' + str(Path(tmp) / 'profile'),
                 '--dump-dom', copy.as_uri()]
-        done = subprocess.run(argv, capture_output=True, text=True, encoding='utf-8',
-                              errors='replace', timeout=int(os.environ.get('SWARM_GATE_TIMEOUT', '300')))
+        limit = int(os.environ.get('SWARM_GATE_TIMEOUT', '300'))
+        for attempt in (1, 2):
+            try:
+                # A warm launch judges a page in under two seconds, so a first attempt that has
+                # not come back in thirty is a cold browser, not a slow page: cut it short and
+                # spend the real ceiling on the attempt that can succeed.
+                done = subprocess.run(argv, capture_output=True, text=True, encoding='utf-8',
+                                      errors='replace',
+                                      timeout=min(limit, 30) if attempt == 1 else limit)
+                break
+            except subprocess.TimeoutExpired:
+                if attempt == 2:
+                    raise
+                # The first launch on a cold machine warms the browser even when it does not
+                # return in time; the second is the one that judges the page.
+                print('ui gate: first browser launch timed out after %ss, retrying once' % limit,
+                      file=sys.stderr)
     return done.stdout
 
 
