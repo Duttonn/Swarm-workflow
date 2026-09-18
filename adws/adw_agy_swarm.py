@@ -54,6 +54,14 @@ def main():
                            'SWARM_AGENT_TOKEN_LIMIT': '6000000' if cli else '60000',
                            'SWARM_AGENT_OUTPUT_LIMIT': '60000' if cli else '12000',
                            'SWARM_MAX_PARALLEL': '2',
+                           # 45s of silence means a dead socket on a raw endpoint. On a free
+                           # coding CLI it means the queue: measured on run a3f176c3, the
+                           # prototype was killed at 45s idle having already written a complete
+                           # four-block file to disk, and the finisher was killed at 45s before
+                           # its first token - which is why a 5/18 assembly shipped with nobody
+                           # left to repair it.
+                           'SWARM_FIRST_OUTPUT_TIMEOUT': '240' if cli else '45',
+                           'SWARM_IDLE_TIMEOUT': '180' if cli else '45',
                            'SWARM_STAGGER_SECONDS': '0', 'SWARM_COORD': '1'}.items():
             os.environ.setdefault(key, value)
     from adw_modules.agy_swarm import execute_swarm, choose, trace
