@@ -1352,25 +1352,45 @@ def run_swarm(run, spec, warm, box):
     # One finisher turn was measured to populate every panel and still leave four scenario
     # steps failing (run 65ba13c8). The gate's new list is the only thing that makes the next
     # turn different from the last, so re-judge between turns and stop as soon as it is green.
+    retry_task = (
+        'You are the finisher. Your previous turn ended before it replied, so the defects below '
+        'are the SAME list as last time and none of them is fixed yet. Your file at %s is in '
+        'your workspace with whatever you managed to change; do not copy the assembly over it. '
+        'Fix the defects there with edit calls, markers still in place, never rewriting the '
+        'whole file in one call. Put code = "" in the json block.\nDEFECTS:\n%s\n')
     rounds = max(1, int(os.environ.get('SWARM_REPAIR_ROUNDS', '3')))
-    fin, finished, workspace = None, '', root / 'finisher' / out_name
+    fin, finished, workspace, failed = None, '', root / 'finisher' / out_name, ''
     for attempt in range(1, rounds + 1):
-        finish_task = (first_task % (shown(assembled_path), out_name,
-                                     '\n'.join(defects[:60]) or 'none reported')
-                       if attempt == 1 else
-                       again_task % (out_name, '\n'.join(defects[:60])))
+        listed = '\n'.join(defects[:60]) or 'none reported'
+        if attempt == 1 or (failed and not workspace.is_file()):
+            finish_task = first_task % (shown(assembled_path), out_name, listed)
+        elif failed:
+            finish_task = retry_task % (out_name, listed)
+        else:
+            finish_task = again_task % (out_name, listed)
+        failed = ''
         try:
             fin = peer_round(run, [AgentRequest('finisher', brief('finisher', root / 'finisher',
                                                                  finish_task),
                                                 root / 'finisher', shared=(board,), sandbox=box, runner=whole_runner, model=whole_model)],
                              2 + attempt, started=time.time(), cap=cap, board=board, gate=False)['finisher']
         except RuntimeError as exc:
+            failed, fin = str(exc), None
             print('finisher attempt %d failed: %s' % (attempt, exc), file=sys.stderr)
-            break
+            # A closed quota or an exhausted run ends the repair; one bad turn does not.
+            # Measured on run 520776b5: the finisher answered "no reply text" once, the loop
+            # gave up, and a 16/16-panel page shipped with three scenario steps still failing.
+            if stops_the_swarm(failed) or run.__dict__.get('swarm_stop'):
+                break
+        # The file on disk is the deliverable even when the reply is missing, as for the prototype.
         delivered = delivered_file(workspace, fin)
         if delivered.strip():
             finished = delivered
-        if not finished.strip() or attempt == rounds:
+        if attempt == rounds:
+            break
+        if failed:
+            continue            # nothing new was judged: the same defects go back for another turn
+        if not finished.strip():
             break
         verdict = page_verdict(workspace, suffix, spec.get('ui_scenario'))
         trace(run, '', 'ui_gate', 'finished-%d' % attempt, verdict or {'ok': None})
