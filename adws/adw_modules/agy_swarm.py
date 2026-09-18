@@ -1323,24 +1323,53 @@ def run_swarm(run, spec, warm, box):
         trace(run, '', 'ui_gate', 'assembled', ui_before)
         defects = ui_defects(ui_before) + defects
 
-    # 4. one finisher applies the listed defects, and only those
-    finish_task = (
+    # 4. the finisher applies the listed defects, and only those - then answers for the result
+    first_task = (
         'You are the finisher. The assembled file is at %s. The reviewers listed the defects '
         'below. Apply ONLY those fixes, keep every part marker exactly where it is, and change '
         'nothing else: the blocks belong to their authors.\n'
         'DELIVER BY WRITING THE FILE: copy the assembled file into YOUR WORKSPACE as %s and apply '
         'the fixes there with edit calls, markers still in place; never rewrite the whole file in '
-        'one call. Put code = "" in the json block.\nDEFECTS:\n%s\n'
-        % (shown(assembled_path), out_name, '\n'.join(defects[:60]) or 'none reported'))
-    fin, finished = None, ''
-    try:
-        fin = peer_round(run, [AgentRequest('finisher', brief('finisher', root / 'finisher',
-                                                             finish_task),
-                                            root / 'finisher', shared=(board,), sandbox=box, runner=whole_runner, model=whole_model)],
-                         3, started=time.time(), cap=cap, board=board, gate=False)['finisher']
-    except RuntimeError as exc:
-        print('finisher failed, shipping the assembly: %s' % exc, file=sys.stderr)
-    finished = delivered_file(root / 'finisher' / out_name, fin)
+        'one call. Put code = "" in the json block.\nDEFECTS:\n%s\n')
+    again_task = (
+        'You are the finisher, and your own file at %s is what a person just tried to use. '
+        'These defects are what the browser found in YOUR version, after your previous fixes: '
+        'they are not the same list as last time, and nothing else is in dispute.\n'
+        'Fix them in that file with edit calls, markers still in place, never rewriting the '
+        'whole file in one call. Put code = "" in the json block.\nDEFECTS:\n%s\n')
+    # One finisher turn was measured to populate every panel and still leave four scenario
+    # steps failing (run 65ba13c8). The gate's new list is the only thing that makes the next
+    # turn different from the last, so re-judge between turns and stop as soon as it is green.
+    rounds = max(1, int(os.environ.get('SWARM_REPAIR_ROUNDS', '3')))
+    fin, finished, workspace = None, '', root / 'finisher' / out_name
+    for attempt in range(1, rounds + 1):
+        finish_task = (first_task % (shown(assembled_path), out_name,
+                                     '\n'.join(defects[:60]) or 'none reported')
+                       if attempt == 1 else
+                       again_task % (out_name, '\n'.join(defects[:60])))
+        try:
+            fin = peer_round(run, [AgentRequest('finisher', brief('finisher', root / 'finisher',
+                                                                 finish_task),
+                                                root / 'finisher', shared=(board,), sandbox=box, runner=whole_runner, model=whole_model)],
+                             2 + attempt, started=time.time(), cap=cap, board=board, gate=False)['finisher']
+        except RuntimeError as exc:
+            print('finisher attempt %d failed: %s' % (attempt, exc), file=sys.stderr)
+            break
+        delivered = delivered_file(workspace, fin)
+        if delivered.strip():
+            finished = delivered
+        if not finished.strip() or attempt == rounds:
+            break
+        verdict = page_verdict(workspace, suffix, spec.get('ui_scenario'))
+        trace(run, '', 'ui_gate', 'finished-%d' % attempt, verdict or {'ok': None})
+        if not verdict or verdict.get('ok'):
+            break
+        defects = ui_defects(verdict)
+        if not defects:
+            break
+        print('repair %d: %d defect(s) still open' % (attempt, len(defects)), file=sys.stderr)
+    if not finished.strip():
+        print('finisher produced nothing, shipping the assembly', file=sys.stderr)
     board_refresh(run, board, settle=0)   # only posts the polls missed are new here
 
     # 5. the fixed tests pick the winner, not the last agent to speak
