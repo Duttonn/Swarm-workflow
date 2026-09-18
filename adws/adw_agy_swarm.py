@@ -49,7 +49,10 @@ def main():
         # enforcement is telemetry after the turn - it only failed the phase that was going to
         # fill the page. Wall clock and the watchdog are the real brakes.
         cli = (os.environ.get('SWARM_RUNNER') or spec.get('runner') or 'gemini') != 'nim'
-        for key, value in {'SWARM_CALL_TIMEOUT': '900', 'SWARM_RUN_TIMEOUT': '2400',
+        # 2400s was one finisher turn too short: run b649e057 reached review at 35:41 and its
+        # finisher died on 'run wall-time budget exhausted' before a single turn, so the
+        # repair loop never ran. A CLI gets an hour; the watchdog still cuts a stalled run.
+        for key, value in {'SWARM_CALL_TIMEOUT': '900', 'SWARM_RUN_TIMEOUT': '3600' if cli else '2400',
                            'SWARM_RUN_TOKEN_LIMIT': '40000000' if cli else '180000',
                            'SWARM_AGENT_TOKEN_LIMIT': '6000000' if cli else '60000',
                            'SWARM_AGENT_OUTPUT_LIMIT': '60000' if cli else '12000',
