@@ -202,6 +202,59 @@ def contract(con, run_id):
     return json.loads(row['payload_json'] or '{}') if row else {}
 
 
+def adaptive_trace(events):
+    """Optional telemetry; older traces remain readable without these events."""
+    out = {'plan': {}, 'usage': {}, 'stop_reason': ''}
+    for event in events:
+        payload = event['payload']
+        if event['name'] == 'adaptive_plan' and isinstance(payload, dict):
+            out['plan'] = payload
+        elif event['name'] == 'budget_status' and isinstance(payload, dict):
+            out['usage'] = payload
+        if isinstance(payload, dict) and payload.get('stop_reason'):
+            out['stop_reason'] = str(payload['stop_reason'])
+    return out
+
+
+def adaptive_budget(telemetry, fallback):
+    plan, usage = telemetry['plan'], telemetry['usage']
+    cap = plan.get('token_limit')
+    if not isinstance(cap, (int, float)) or cap <= 0:
+        return fallback
+    used = usage.get('tokens_used')
+    known = usage.get('tokens_known') is True and isinstance(used, (int, float)) and used >= 0
+    if known:
+        result = budget(0, {}, 0, 0, 0, False, used, cap)
+        result['known'] = True
+        return result
+    return {'kind': 'tokens', 'used': None, 'cap': cap, 'known': False,
+            'label': f'Usage unknown; {num(cap)} token cap declared',
+            'meter': 'COST n/a', 'left': 'Token budget remaining unknown',
+            'over': False, 'pct': 0.0}
+
+
+def learning_history(con):
+    """Read a bounded local learning snapshot; never follow a path from a trace."""
+    explicit = os.environ.get('SWARM_LEARNING_PATH')
+    if explicit:
+        candidates = [Path(explicit)]
+    else:
+        db = next((r[2] for r in con.execute('PRAGMA database_list') if r[1] == 'main'), '')
+        candidates = [p / 'work' / 'adaptive' / 'history.json'
+                      for p in list(Path(db).resolve().parents)[:5]] if db else []
+    for path in candidates:
+        try:
+            with path.open('rb') as handle:
+                data = handle.read(2 * 1024 * 1024 + 1)
+            if len(data) > 2 * 1024 * 1024:
+                return []
+            rows = json.loads(data)
+            return [row for row in rows[-500:] if isinstance(row, dict)] if isinstance(rows, list) else []
+        except (OSError, ValueError, UnicodeError):
+            continue
+    return []
+
+
 def budget(cost, limits, calls, agents, cap_usd, cost_available=True, tokens=0, token_cap=0):
     """Cost bar when the run priced itself, else the token budget it declared,
     else the tool-call cap it agreed to."""
@@ -365,6 +418,13 @@ def load(con, run_id, cap_usd=30.0):
     run['budget'] = budget(run['cost'], run['limits'], calls, len(people), cap_usd,
                            spec.get('cost_available') is not False,
                            run['tokens'], int(spec.get('budget_tokens') or 0))
+    run['adaptive'] = adaptive_trace(events)
+    run['budget'] = adaptive_budget(run['adaptive'], run['budget'])
+    if run['budget'].get('known') is True:
+        run['tokens'] = run['budget']['used']
+    run['model'] = run['adaptive']['plan'].get('model') or run['model']
+    run['runner'] = run['adaptive']['plan'].get('runner') or spec.get('runner') or 'unknown'
+    run['history'] = learning_history(con)
     return run
 
 
@@ -464,6 +524,35 @@ def agent_rows(run):
     return out
 
 
+def case_counts(output):
+    """(passed, total) from a unittest -v transcript, or (None, None) when it is not one."""
+    ok = len(re.findall(r'\.\.\. ok\b', output or ''))
+    bad = len(re.findall(r'\.\.\. (?:FAIL|ERROR)\b', output or ''))
+    return (ok, ok + bad) if ok + bad else (None, None)
+
+
+def judged(events):
+    """The candidate this run shipped, as (fixed_tests, ui_verdict).
+
+    A run writes one `candidate` event per candidate and one `artifact` event naming the
+    winner. The last ui_gate event is not the answer: a candidate whose page hung the browser
+    is traced last and carries no counts at all.
+    """
+    picks = [e['payload'] for e in events if e['type'] == 'candidate' and isinstance(e['payload'], dict)]
+    if not picks:
+        return None, None
+    winner = next((e['payload'].get('candidate') for e in reversed(events)
+                   if e['type'] == 'artifact' and isinstance(e['payload'], dict)
+                   and e['payload'].get('candidate')), None)
+    named = [e['payload'] for e in events if e['type'] == 'candidate' and e['name'] == winner
+             and isinstance(e['payload'], dict)]
+    # The shipped candidate is the run's result, but a verdict it never got is not evidence:
+    # fall back to whichever candidate the gate did manage to judge.
+    ordered = named + [x for x in picks if x not in named]
+    best = next((x for x in ordered if isinstance((x.get('ui') or {}).get('panels'), int)), ordered[0])
+    return best, best.get('ui') if isinstance(best.get('ui'), dict) else None
+
+
 def swarm_list(con, limit=25, cap_usd=30.0):
     """The front page, in five queries: one per table, all grouped by run."""
     counts = {r['adw_id']: r for r in con.execute(
@@ -484,6 +573,12 @@ def swarm_list(con, limit=25, cap_usd=30.0):
     specs = {}
     for row in con.execute("SELECT adw_id, payload_json FROM events WHERE type='run_contract'"):
         specs.setdefault(row['adw_id'], json.loads(row['payload_json'] or '{}'))
+    allocations = {}
+    for row in con.execute("SELECT adw_id, name, payload_json FROM events "
+                           "WHERE name IN ('adaptive_plan','budget_status','swarm_stop') "
+                           "ORDER BY started_at, rowid"):
+        allocations.setdefault(row['adw_id'], []).append(
+            {'name': row['name'], 'payload': json.loads(row['payload_json'] or '{}')})
 
     out = []
     for row in con.execute('SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?', (limit,)):
@@ -497,6 +592,7 @@ def swarm_list(con, limit=25, cap_usd=30.0):
         # roster is the larger of the two counts, never just agent_sessions.
         people = max(agents.get(run_id, 0), owners.get(run_id, 0))
         state = liveness(row['ended_at'], count['last_at'] if count else None, row['status'])
+        adaptive = adaptive_trace(allocations.get(run_id, []))
         out.append({
             'adw_id': run_id,
             'name': (row['adw_name'] or run_id).upper(),
@@ -506,7 +602,9 @@ def swarm_list(con, limit=25, cap_usd=30.0):
             'started_at': row['started_at'], 'ended_at': row['ended_at'],
             'last_at': count['last_at'] if count else None,
             'elapsed': elapsed(row['started_at'], row['ended_at']),
-            'model': spec.get('model', '?'),
+            'model': adaptive['plan'].get('model') or spec.get('model', '?'),
+            'runner': adaptive['plan'].get('runner') or spec.get('runner') or 'unknown',
+            'adaptive': adaptive,
             'agents': people, 'procs': procs.get(run_id, 0),
             # Boards, not phases. A 20-agent run has one board and 21 phases.
             'threads': (count['boards'] if count else 0) or 0,
@@ -519,6 +617,9 @@ def swarm_list(con, limit=25, cap_usd=30.0):
                              row['total_tokens'] or 0, int(spec.get('budget_tokens') or 0)),
             'ticks': [],
         })
+        out[-1]['budget'] = adaptive_budget(adaptive, out[-1]['budget'])
+        if out[-1]['budget'].get('known') is True:
+            out[-1]['tokens'] = out[-1]['budget']['used']
     # One tick strip per row, from the events that mean something at a glance.
     # A single query for every listed run; thin() keeps the markup flat.
     ids = [r['adw_id'] for r in out]
@@ -589,7 +690,7 @@ def state_tag(state):
 
 
 def nav(active, run_id=None):
-    items = [('SWARMS', '/')]
+    items = [('SWARMS', '/'), ('COMPARE', '/compare')]
     if run_id:
         suffix = f'?run={quote(run_id)}'
         items += [('OVERVIEW', '/threads' + suffix), ('BOARD', f'/board{suffix}&board=primary'),
@@ -611,7 +712,7 @@ def header(state, active, run_id=None, meters=True):
     {state_tag(state['state'])}
     <span class="chip">{escape(str(state['model']))}</span>
     <span>{escape(state['cost'])}</span>
-    <span class="d">{short(state['tokens'])} tok | {num(state['calls'])} calls</span>
+    <span class="d">{'unknown' if state.get('tokens_known') is False else short(state['tokens'])} tok | {num(state['calls'])} calls</span>
     {bar(b['pct'], RED if b.get('over') else ACCENT, '120px')}
     <span class="{'warn' if b.get('over') else 'd'}">{escape(b['left'])}</span>
   </div>'''
@@ -874,8 +975,9 @@ def render_swarms(con, limit, cap_usd):
              'model': newest['model'] if newest else '?',
              'cost': f'${spent:.4f} COST' if priced else 'COST n/a',
              'tokens': sum(r['tokens'] for r in rows), 'calls': sum(r['calls'] for r in rows),
+             'tokens_known': all(r['budget'].get('known') is not False for r in rows),
              'budget': {'pct': 0.0, 'left': f'{len(rows)} runs on record'}}
-    out = [header(state, 'SWARMS'), '<main>',
+    out = [header(state, 'SWARMS'), '<main>', learning_panel(learning_history(con)),
            f'<h1>swarms <small>{len(rows)} on record &middot; {live} live</small></h1>',
            f'<div class="tools">{search_box("300px")}</div>']
     if not rows:
@@ -899,15 +1001,17 @@ def render_swarms(con, limit, cap_usd):
   <span class="d">{escape(row['name'])} &middot; {escape(day(row['started_at']))}</span>
   <span class="grow"></span>
   <span class="chip">{escape(str(row['model']))}</span>
+  <span class="chip">{escape(str(row['runner']))}</span>
   <span class="clk" data-since="{escape(str(row['started_at'] or ''))}"
         data-live="{1 if row['live'] else 0}"><b>{escape(row['clock'])}</b></span>
  </div>
  <div style="margin-top:6px">{escape(clip(row['request'], 170))}</div>
+ <div class="d">{escape(allocation_summary(row['adaptive']))}</div>
  <div class="line d" style="margin-top:8px">
   <span class="n"><b>{row['agents']}</b> agents &middot; <b>{row['threads']}</b> {thread_word}
    &middot; <b>{row['msgs']}</b> posts &middot; <b>{row['phases']}</b> phases
    &middot; <b>{num(row['calls'])}</b> calls
-   &middot; <b title="{num(row['tokens'])} tokens">{short(row['tokens'])}</b> tok
+   &middot; <b title="{'Unknown tokens' if b.get('known') is False else num(row['tokens']) + ' tokens'}">{'unknown' if b.get('known') is False else short(row['tokens'])}</b> tok
    &middot; <b>{spent}</b> cost{fails}</span>
   {ticks(row['ticks'], 18, f"{row['events']} events")}
   {bar(b['pct'], RED if b.get('over') else edge, '150px')}
@@ -916,6 +1020,132 @@ def render_swarms(con, limit, cap_usd):
 </a>''')
     out.append('</main>')
     return ''.join(out), bool(live)
+
+
+def render_compare(con, cap_usd):
+    """One comparable row per run, grouped only when a recorded contract fingerprint agrees."""
+    sessions = list(con.execute('SELECT * FROM sessions ORDER BY started_at DESC'))
+    phases = {r['adw_id']: r for r in con.execute(
+        "SELECT adw_id, SUM(lower(status)='success') passed, COUNT(*) total "
+        'FROM phases GROUP BY adw_id')}
+    registered = {r['adw_id']: r['n'] for r in con.execute(
+        'SELECT adw_id, COUNT(*) n FROM agent_sessions GROUP BY adw_id')}
+    owners = {r['adw_id']: r['n'] for r in con.execute(
+        "SELECT adw_id, COUNT(DISTINCT owner) n FROM phases WHERE kind='agent' GROUP BY adw_id")}
+    traces = {}
+    for event in con.execute(
+            "SELECT adw_id, type, name, payload_json FROM events WHERE type IN "
+            "('run_contract','ui_gate','candidate','artifact') "
+            "OR (type IN ('gate_pass','gate_fail') AND name='acceptance') "
+            "OR name IN ('adaptive_plan','budget_status','swarm_stop') ORDER BY started_at, rowid"):
+        traces.setdefault(event['adw_id'], []).append({
+            'type': event['type'], 'name': event['name'] or '',
+            'payload': json.loads(event['payload_json'] or '{}')})
+    history = {}
+    for record in learning_history(con):
+        if record.get('run_id'):
+            history[record['run_id']] = record
+
+    rows = []
+    for session in sessions:
+        run_id = session['adw_id']
+        events = traces.get(run_id, [])
+        spec = next((e['payload'] for e in events if e['type'] == 'run_contract'
+                     and isinstance(e['payload'], dict)), {})
+        adaptive = adaptive_trace(events)
+        record = history.get(run_id, {})
+        phase = phases.get(run_id)
+        gates = [e for e in events if e['name'] == 'acceptance'
+                 and e['type'] in ('gate_pass', 'gate_fail')]
+        shipped, ui = judged(events)
+        # The gate event carries the whole transcript; the candidate event carries its tail.
+        cases = next((c for c in (case_counts((e['payload'] or {}).get('output', ''))
+                                  for e in reversed(gates)) if c[1]),
+                     case_counts((shipped or {}).get('output', '')))
+        if ui is None:
+            ui = next((e['payload'] for e in reversed(events) if e['type'] == 'ui_gate'
+                       and isinstance(e['payload'], dict)
+                       and isinstance(e['payload'].get('panels'), int)), None)
+        panels = ui.get('panels') if ui else None
+        empty = ui.get('empty_panels') if ui else None
+        ui_result = (f'{num(max(0, panels - len(empty)))}/{num(panels)}'
+                     if isinstance(panels, int) and panels >= 0 and isinstance(empty, list) else '-')
+        elapsed_seconds = record.get('elapsed_seconds')
+        if isinstance(elapsed_seconds, (int, float)) and elapsed_seconds >= 0:
+            whole = int(elapsed_seconds)
+            elapsed_value = (f'{whole // 3600}:{whole % 3600 // 60:02d}:{whole % 60:02d}'
+                             if whole >= 3600 else (f'{whole // 60}:{whole % 60:02d}'
+                                                    if whole >= 60 else f'{whole}s'))
+        else:
+            elapsed_value = clock(session['started_at'], session['ended_at'])
+        tokens = record.get('tokens') if 'tokens' in record else None
+        usage = adaptive['usage']
+        if 'tokens' in record and tokens is None:
+            token_value = 'unknown'
+        elif isinstance(tokens, (int, float)) and tokens >= 0:
+            token_value = num(tokens)
+        elif usage.get('tokens_known') is True and isinstance(usage.get('tokens_used'), (int, float)):
+            token_value = num(usage['tokens_used'])
+        elif usage.get('tokens_known') is False:
+            token_value = 'unknown'
+        elif session['total_tokens'] is not None:
+            token_value = num(session['total_tokens'])
+        else:
+            token_value = '-'
+        rows.append({
+            'adw_id': run_id, 'started': day(session['started_at']),
+            'runner': adaptive['plan'].get('runner') or spec.get('runner') or 'unknown',
+            'model': adaptive['plan'].get('model') or spec.get('model') or '-',
+            'owners': max(registered.get(run_id, 0), owners.get(run_id, 0)),
+            'elapsed': elapsed_value,
+            'phases': f'{num(phase["passed"] or 0)}/{num(phase["total"])}' if phase else '-',
+            'fixed': (lambda passed, total: f'{num(passed)}/{num(total)}' if total else (
+                f'{num(sum(e["type"] == "gate_pass" for e in gates))}/{num(len(gates))}'
+                if gates else '-'))(*cases),
+            'ui': ui_result, 'tokens': token_value,
+            'stop_reason': record.get('stop_reason') or adaptive['stop_reason'] or '-',
+            'accepted': record.get('accepted'), 'seconds': elapsed_seconds,
+            'spec_hash': record.get('spec_hash') or adaptive['plan'].get('spec_hash') or '',
+            'output_file': spec.get('output_file') or '-',
+        })
+    groups = {}
+    for row in rows:
+        key = row['spec_hash'] or row['adw_id']
+        groups.setdefault(key, []).append(row)
+    state = {'state': 'done', 'ticking': False, 'elapsed': '--', 'started_at': '',
+             'agent_count': 0, 'model': '-', 'cost': 'COST n/a', 'tokens': 0,
+             'tokens_known': True, 'calls': 0, 'budget': {'pct': 0.0, 'left': ''}}
+    out = [header(state, 'COMPARE', meters=False), '<main>',
+           f'<h1>compare <small>{len(rows)} runs on record</small></h1>']
+    if not rows:
+        out.append('<p class="empty">no runs recorded yet</p>')
+    for key, group in groups.items():
+        fastest = min((r for r in group if r['accepted'] is True
+                       and isinstance(r['seconds'], (int, float)) and r['seconds'] >= 0),
+                      key=lambda r: r['seconds'], default=None)
+        output_file = next((r['output_file'] for r in group if r['output_file'] != '-'), '-')
+        label = key[:12] if any(r['spec_hash'] for r in group) else 'unfingerprinted'
+        out.append(f'<section class="panel" style="padding:16px;overflow:auto;margin:16px 0">'
+                   f'<h2>brief {escape(label)} <small>output: {escape(str(output_file))} '
+                   f'&middot; {len(group)} runs</small></h2><table><thead><tr>'
+                   '<th>run</th><th>started</th><th>runner / model</th><th>owners</th>'
+                   '<th>elapsed</th><th>phases</th><th>fixed tests</th><th>UI panels</th>'
+                   '<th>tokens</th><th>stop reason</th><th>accepted</th></tr></thead><tbody>')
+        for row in group:
+            accepted = 'yes' if row['accepted'] is True else ('no' if row['accepted'] is False else '-')
+            fastest_tag = ' <span class="tag ok">FASTEST</span>' if row is fastest else ''
+            out.append(f'<tr><td><a href="/threads?run={quote(str(row["adw_id"]))}">'
+                       f'{escape(str(row["adw_id"]))}</a>{fastest_tag}</td>'
+                       f'<td>{escape(str(row["started"] or "-"))}</td>'
+                       f'<td>{escape(str(row["runner"]))}<br><span class="d">'
+                       f'{escape(str(row["model"]))}</span></td><td>{row["owners"]}</td>'
+                       f'<td>{escape(str(row["elapsed"]))}</td><td>{row["phases"]}</td>'
+                       f'<td>{row["fixed"]}</td><td>{row["ui"]}</td>'
+                       f'<td>{escape(str(row["tokens"]))}</td>'
+                       f'<td>{escape(str(row["stop_reason"]))}</td><td>{accepted}</td></tr>')
+        out.append('</tbody></table></section>')
+    out.append('</main>')
+    return ''.join(out), False
 
 
 def scrubber(run):
@@ -931,6 +1161,7 @@ def head_state(run):
     return {'state': run['state'], 'ticking': run['live'], 'elapsed': run['elapsed'],
             'started_at': run['started_at'], 'agent_count': len(run['agents']),
             'model': run['model'], 'cost': run['budget']['meter'], 'tokens': run['tokens'],
+            'tokens_known': run['budget'].get('known'),
             'calls': run['calls'], 'budget': run['budget']}
 
 
@@ -966,6 +1197,73 @@ def run_tone(run):
     return RED if run['status'].upper() in FAILED_STATUS else GREEN
 
 
+def allocation_summary(adaptive):
+    plan = adaptive['plan']
+    pieces = []
+    if plan:
+        pieces.append(f"Allocation: {plan.get('selected_agents', '?')} agents / {plan.get('difficulty', 'unclassified')}")
+    if adaptive['stop_reason']:
+        pieces.append('Stopped: ' + adaptive['stop_reason'])
+    return ' | '.join(pieces)
+
+
+def learning_panel(history, run_id=None):
+    """Show measured history without asserting equivalence across different tasks."""
+    current = next((r for r in reversed(history) if r.get('run_id') == run_id), None)
+    comparable = bool(current and current.get('spec_hash') and current.get('quality_kind'))
+    if run_id and comparable:
+        history = [r for r in history if r.get('spec_hash') == current['spec_hash']
+                   and r.get('quality_kind') == current['quality_kind']]
+    elif run_id:
+        history = [r for r in history if r.get('run_id') == run_id]
+    note = ('Same task hash and quality criterion; timings are observed, not a controlled benchmark.'
+            if comparable else 'Recorded outcomes; different tasks and quality criteria are not equivalent.')
+    if not history:
+        return '<section class="panel" style="padding:16px"><h2>launch learning</h2><p class="d">No comparable learning records yet.</p></section>'
+    def cell(value):
+        return escape(str(value if value is not None else 'unknown'))
+    rows = []
+    for row in reversed(history[-12:]):
+        accepted = 'pass' if row.get('accepted') is True else ('fail' if row.get('accepted') is False else 'unknown')
+        rows.append('<tr>' + ''.join(f'<td>{cell(value)}</td>' for value in (
+            row.get('run_id'), row.get('runner'), row.get('model'), row.get('agents'), accepted,
+            row.get('elapsed_seconds'), row.get('init_seconds'), row.get('tokens'),
+            row.get('stop_reason') or '-', row.get('source'), row.get('quality_kind'))) + '</tr>')
+    headings = ('run', 'runner/provider', 'model', 'agents', 'quality', 'elapsed s', 'init s',
+                'tokens', 'stop reason', 'source', 'quality criterion')
+    return ('<section class="panel" style="padding:16px;overflow:auto"><h2>launch learning</h2>'
+            f'<p class="d">{note}</p><table><thead><tr>'
+            + ''.join(f'<th>{h}</th>' for h in headings) + '</tr></thead><tbody>'
+            + ''.join(rows) + '</tbody></table></section>')
+
+
+def allocation_panel(run):
+    adaptive = run['adaptive']
+    plan = adaptive['plan']
+    def text(value):
+        return escape(str(value if value is not None else 'unknown'))
+    def items(key):
+        value = plan.get(key)
+        return value[:20] if isinstance(value, list) else []
+    state = ('Trace silent for over 120s; no recent progress observed.' if run['state'] == 'stale'
+             else ('Completed' if run['state'] == 'done' else 'Receiving trace events'))
+    stop = adaptive['stop_reason'] or ('not recorded' if run['state'] == 'done' else 'none recorded')
+    reasons = ''.join(f'<li>{text(reason)}</li>' for reason in items('reasons'))
+    skills = ', '.join(f"{s.get('role', '?')}: {s.get('name', '?')}" for s in items('skills') if isinstance(s, dict))
+    sources = ', '.join(str(value) for value in items('source_runs')) or 'none'
+    return f'''<section class="panel" style="padding:16px;margin:16px 0">
+ <h2>allocation and guardrails</h2>
+ <div class="line"><span class="chip">{text(run['runner'])}</span><span class="chip">{text(run['model'])}</span>
+ <span>{text(state)}</span></div>
+ <p>Stop reason: {text(stop)} | Last event: {text(ago(run['last_at']))}</p>
+ <p>{text(allocation_summary(adaptive) or 'Historical run: adaptive allocation not recorded.')}</p>
+ <ul>{reasons}</ul>
+ <p class="d">Call timeout: {text(plan.get('call_timeout_seconds'))} s | Idle timeout: {text(plan.get('idle_timeout_seconds'))} s | Output limit: {text(plan.get('output_limit'))} tokens per call</p>
+ <p>{text(run['budget']['left'])}</p>
+ <p class="d">Learning sources: {text(sources)} | Role skills: {text(skills or 'none recorded')}</p>
+</section>'''
+
+
 def hero(run):
     """The block people screenshot: id, brief, verdict, and the big counters."""
     b = run['budget']
@@ -987,7 +1285,7 @@ def hero(run):
  <div class="stats">
   {stat(escape(run['elapsed']), 'elapsed', tone, cls='clk', attrs=clk)}
   {stat(f'${run["cost"]:.2f}' if priced else 'n/a', 'spent', None if priced else FAINT)}
-  {stat(short(run['tokens']), 'tokens')}
+  {stat('unknown' if b.get('known') is False else short(run['tokens']), 'tokens')}
   {stat(num(run['calls']), 'tool calls', small=True)}
   {stat(run['msgs'], 'posts', small=True)}
   {stat(f'{done}/{len(run["phases"])}', 'phases', small=True)}
@@ -1201,6 +1499,7 @@ def render_threads(con, run_id, cap_usd, order='activity', show='all'):
     shown = min(MONITOR_TAIL, sum(1 for e in run['events'] if e['type'] in MONITOR_TYPES))
 
     out = [header(head_state(run), 'OVERVIEW', run_id, meters=False), '<main>', hero(run),
+           allocation_panel(run), learning_panel(run['history'], run_id),
            f'<div class="tools">{search_box()}'
            + segment('ORDER', SORTS, order, f'{base}&show={show}&order=')
            + segment('SHOW', SHOWS, show, f'{base}&order={order}&show=') + '</div>',
@@ -1501,6 +1800,9 @@ def route(con, path, query, cap_usd, limit):
     if path == '/raw':
         body, live = render_raw(con, run_id, cap_usd, tab)
         return body, f'raw {run_id}', live
+    if path == '/compare':
+        body, live = render_compare(con, cap_usd)
+        return body, 'compare', live
     body, live = render_swarms(con, limit, cap_usd)
     return body, 'swarms', live
 
@@ -1655,6 +1957,7 @@ def demo():
             tools = page_of('/agent/stitch', {'run': ['run1'], 'tab': ['tools']})
             fails = page_of('/agent/stitch', {'run': ['run1'], 'tab': ['failures']})
             raw = page_of('/raw', {'run': ['run1']})
+            compare = page_of('/compare', {})
             only_active = page_of('/threads', {'run': ['run1'], 'show': ['active']})
             no_swarm = page_of('/threads', {'run': ['nope']})
             no_agent = page_of('/agent/ghost', {'run': ['run1']})
@@ -1733,6 +2036,7 @@ def demo():
         assert '<b>1</b> thread' in swarms and '<b>3</b> phases' in swarms, swarms
         assert 'href="/threads?run=run1"' in swarms, swarms[:400]
         assert 'LIVE' in swarms and 'class="spark"' in swarms, swarms[:400]
+        assert 'compare' in compare and 'run1' in compare, compare[:400]
         # The overview: hero counters, one tile per agent, the monitor, the board
         # as one column, then the phases under their own heading.
         assert 'class="hero panel"' in threads and '>elapsed<' in threads, threads[:1200]
