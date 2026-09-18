@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -170,7 +171,11 @@ def startup_context(spec, root=ROOT):
     return context if len(json.dumps(context)) <= 6000 else None
 
 
-def skill_context(spec, role, limit=5000):
+# One ordinary SKILL.md is bigger than the old 5,000-character budget: the only skill the
+# chooser found for the kanban brief is 6,625, so every plan shipped `skills: []` while the
+# sidecar sat on disk naming it. Two skills is the most a role is given, so 12,000 holds a
+# normal one without letting a long document take the agent's context.
+def skill_context(spec, role, limit=12000):
     """Inject only explicitly selected local skills, with bounded text and provenance.
 
     `role_skills` maps a role (or '*') to paths. Vercel discovery happens once
@@ -185,7 +190,10 @@ def skill_context(spec, role, limit=5000):
             raise ValueError('role skill must reference an existing SKILL.md: %s' % path)
         content = path.read_text(encoding='utf-8')
         if len(content) > left:
-            # Partial instructions can drop a guardrail. Omit rather than truncate them.
+            # Partial instructions can drop a guardrail. Omit rather than truncate them - but
+            # say so, because a silently empty skill list looks like a chooser that found nothing.
+            print('role skill %s omitted for %s: %d characters, %d left' %
+                  (path.parent.name, role, len(content), left), file=sys.stderr)
             continue
         left -= len(content)
         metadata.append({'name': path.parent.name, 'role': role, 'path': str(path),
