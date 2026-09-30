@@ -19,13 +19,15 @@ PROVIDER = os.environ.get('SWARM_CLINE_PROVIDER', 'cline')
 # minutes of reasoning, cline's own request deadline, not ours. A lower reasoning effort is
 # the only lever the CLI exposes (none|low|medium|high|xhigh); unset keeps the model's default.
 THINKING = os.environ.get('SWARM_CLINE_THINKING', '')
+# Cline defaults to agentic, but pass it so each recorded run names the compaction mode used.
+COMPACTION = os.environ.get('SWARM_CLINE_COMPACTION', 'agentic')
 POINTER = ('Your brief is in the file prompt.txt in the current working directory. Read it '
            'first, then follow it exactly and end your reply with the required json block.')
 
 
 def invoke(req: AgentRequest, messages, cancel):
     argv = [cli_path('cline'), '--json', '--auto-approve', 'true', '-c', str(req.folder),
-            '-P', PROVIDER, '-m', req.model, '-t', str(req.timeout)]
+            '-P', PROVIDER, '-m', req.model, '-t', str(req.timeout), '--compaction', COMPACTION]
     if THINKING:
         argv += ['--thinking', THINKING]
     argv.append(POINTER)
