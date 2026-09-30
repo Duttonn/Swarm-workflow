@@ -4,6 +4,7 @@ retry ladder and shared 429 cooldown, the edit/append tools, and the no-tool-cal
 No network. A real call is bench/check_runner.py nim <model>.
 """
 import os
+import json
 import queue
 import sys
 import tempfile
@@ -389,6 +390,124 @@ class Nudge(unittest.TestCase):
         self.assertEqual(proposal.summary, 'finished')
         self.assertEqual(len(seen), 4)
         self.assertEqual(seen[2][-1], 'user', 'the push-back went in as a user turn')
+
+
+class SelfCompaction(unittest.TestCase):
+    ENVELOPE = ('done\n```json\n{"status": "success", "summary": "done", '
+                '"artifacts": [], "notes_for_next_agent": "", "code": "", '
+                '"decisions": [], "risks": []}\n```')
+
+    def setUp(self):
+        self.environ = dict(os.environ)
+        self.interval, self.next_start = nim.MIN_INTERVAL, nim._next_start[0]
+        nim.MIN_INTERVAL, nim._interval[0], nim._next_start[0] = 0.0, 0.0, 0.0
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self.environ)
+        nim.MIN_INTERVAL, nim._interval[0], nim._next_start[0] = (
+            self.interval, self.interval, self.next_start)
+
+    def configure(self, soft='10', warn='20', force='30'):
+        os.environ['SWARM_COMPACT_SOFT'] = soft
+        os.environ['SWARM_COMPACT_WARN'] = warn
+        os.environ['SWARM_COMPACT_FORCE'] = force
+
+    def drive(self, turns):
+        import threading
+        script, seen = iter(turns), []
+
+        def fake(req, history, raw, cancel, *extra):
+            seen.append([dict(message) for message in history])
+            return next(script)
+        real = nim.one_turn
+        nim.one_turn = fake
+        folder = Path(tempfile.mkdtemp(prefix='nim-compact-'))
+        try:
+            proposal, extra = nim.invoke(request(folder), queue.Queue(), threading.Event())
+        finally:
+            nim.one_turn = real
+        return proposal, extra, seen, folder
+
+    @staticmethod
+    def call(name, arguments):
+        return {'id': 'call_' + name, 'name': name, 'arguments': arguments}
+
+    @staticmethod
+    def used(prompt_tokens):
+        return {'prompt_tokens': prompt_tokens, 'completion_tokens': 1,
+                'total_tokens': prompt_tokens + 1}
+
+    def test_soft_notice_appears_after_its_threshold_not_before(self):
+        self.configure()
+        write = self.call('write_file', '{"path": "a.txt", "content": "x"}')
+        _, _, seen, _ = self.drive([
+            ('', [write], 'tool_calls', self.used(1)),
+            ('', [write], 'tool_calls', self.used(11)),
+            (self.ENVELOPE, [], 'stop', self.used(12)),
+        ])
+        tools = [message['content'] for message in seen[2] if message['role'] == 'tool']
+        self.assertNotIn('CONTEXT NOTICE', tools[0])
+        self.assertIn('CONTEXT NOTICE', tools[1])
+
+    def test_warn_notice_replaces_the_soft_notice(self):
+        self.configure()
+        write = self.call('write_file', '{"path": "a.txt", "content": "x"}')
+        _, _, seen, _ = self.drive([
+            ('', [write], 'tool_calls', self.used(1)),
+            ('', [write], 'tool_calls', self.used(11)),
+            ('', [write], 'tool_calls', self.used(21)),
+            (self.ENVELOPE, [], 'stop', self.used(22)),
+        ])
+        tools = [message['content'] for message in seen[3] if message['role'] == 'tool']
+        self.assertIn('CONTEXT WARNING', tools[-1])
+        self.assertNotIn('CONTEXT NOTICE', tools[-1])
+
+    def test_force_refuses_other_tools_then_the_harness_compacts(self):
+        self.configure()
+        read = self.call('read_file', '{"path": "a.txt"}')
+        _, extra, seen, folder = self.drive([
+            ('', [read], 'tool_calls', self.used(30)),
+            ('goal done; next action is finish.', [], 'stop', self.used(31)),
+            (self.ENVELOPE, [], 'stop', self.used(2)),
+        ])
+        summary_input = seen[1]
+        refused = [message['content'] for message in summary_input if message['role'] == 'tool']
+        self.assertIn('REFUSED', refused[0])
+        self.assertIn('self_compact is the only tool', refused[0])
+        self.assertEqual(extra['usage']['compactions'], 1)
+        self.assertTrue((folder / 'events.jsonl').is_file())
+
+    def test_self_compact_keeps_the_prompt_and_note_in_two_messages(self):
+        self.configure()
+        note = 'Run the focused tests before the final envelope.'
+        compact = self.call('self_compact', json.dumps({'note_to_self': note}))
+        _, extra, seen, folder = self.drive([
+            ('', [compact], 'tool_calls', self.used(1)),
+            ('goal: finish; done: compacted; next: run tests.', [], 'stop', self.used(2)),
+            (self.ENVELOPE, [], 'stop', self.used(3)),
+        ])
+        rebuilt = seen[2]
+        self.assertEqual(len(rebuilt), 2)
+        self.assertEqual(rebuilt[0], {'role': 'user', 'content': 'x'})
+        self.assertIn(note, rebuilt[1]['content'])
+        self.assertEqual(extra['usage']['compactions'], 1)
+        event = next(json.loads(line) for line in (folder / 'events.jsonl').read_text().splitlines()
+                     if 'compaction' in line)
+        self.assertEqual(event['compaction'], 1)
+        self.assertEqual(event['note'], note)
+        self.assertFalse(event['forced'])
+
+    def test_thresholds_accept_suffixes_and_plain_integers(self):
+        self.assertEqual(nim.parse_context_tokens('60k'), 60000)
+        self.assertEqual(nim.parse_context_tokens('1M'), 1000000)
+        self.assertEqual(nim.parse_context_tokens(123), 123)
+
+    def test_misordered_thresholds_are_refused_clearly(self):
+        self.configure('60k', '100k', '80k')
+        with self.assertRaises(ValueError) as caught:
+            nim.compact_thresholds()
+        self.assertIn('SWARM_COMPACT_FORCE must be the largest threshold', str(caught.exception))
 
 
 class Envelope(unittest.TestCase):

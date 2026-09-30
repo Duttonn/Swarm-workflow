@@ -39,7 +39,7 @@ from pathlib import Path
 
 from ..agents import _extract_json
 from ..agy_swarm import AgentFailed, AgentRequest, assign, close_job, new_job, terminate
-from .common import AgentBudget, deliver, tool_event, usage
+from .common import AgentBudget, deliver, estimate_tokens, tool_event, usage
 
 
 def has_envelope(text):
@@ -79,6 +79,10 @@ UNFINISHED = ('You stopped without the final JSON answer. If the work is not fin
               'the moment to continue it with tool calls (the file on disk ends where your last '
               'write ended). When it is finished and the suite passes, answer with ONLY the JSON '
               'object the brief asks for.')
+COMPACTION_PROMPT = ('Summarize the work context for the next agent turn. State the goal, what is '
+                     'done, what remains, files written, and the next concrete action. The '
+                     'workspace on disk is the ground truth: do not reinvent work already there. '
+                     'Return only the concise handoff summary.')
 
 # Measured on nemotron-3-super: asked for a file containing &amp; and &lt;, the tool-call
 # arguments arrive as & and <; every escapeHtml it wrote mapped characters to themselves and
@@ -90,6 +94,14 @@ ENTITIES = ('CAUTION: HTML entities you mean to write literally (&amp; &lt; &gt;
             'it from pieces in code (e.g. "&" + "amp;").')
 
 TOOLS = [
+    {'type': 'function', 'function': {
+        'name': 'self_compact',
+        'description': 'Compact your own context at a natural stopping point. Include a concise '
+                       'note to yourself about what to do next; it will be carried verbatim into '
+                       'the next context.',
+        'parameters': {'type': 'object', 'required': ['note_to_self'], 'properties': {
+            'note_to_self': {'type': 'string'},
+            'reason': {'type': 'string'}}}}},
     {'type': 'function', 'function': {
         'name': 'write_file',
         'description': 'Create a file, or REPLACE the whole file if it exists. To add to a file '
@@ -129,6 +141,59 @@ TOOLS = [
         'parameters': {'type': 'object', 'required': ['command'], 'properties': {
             'command': {'type': 'string'}}}}},
 ]
+
+
+def parse_context_tokens(value):
+    """Parse a context threshold such as 60000, 60k, or 1M."""
+    text = str(value).strip()
+    match = re.fullmatch(r'(\d+)\s*([kKmM]?)', text)
+    if not match:
+        raise ValueError('context threshold %r must be a plain integer or use k/M suffixes' % value)
+    multiplier = {'': 1, 'k': 1000, 'm': 1000000}[match.group(2).lower()]
+    parsed = int(match.group(1)) * multiplier
+    if parsed <= 0:
+        raise ValueError('context thresholds must be positive')
+    return parsed
+
+
+def compact_thresholds():
+    """Read thresholds at invocation time so each swarm run records its own configuration."""
+    soft = parse_context_tokens(os.environ.get('SWARM_COMPACT_SOFT', '60k'))
+    warn = parse_context_tokens(os.environ.get('SWARM_COMPACT_WARN', '80k'))
+    force = parse_context_tokens(os.environ.get('SWARM_COMPACT_FORCE', '100k'))
+    if not soft < warn < force:
+        raise ValueError('SWARM_COMPACT_FORCE must be the largest threshold '
+                         '(soft=%d, warn=%d, force=%d)' % (soft, warn, force))
+    return {'soft': soft, 'warn': warn, 'force': force}
+
+
+def context_tokens(history, last_prompt_tokens=None):
+    """Use provider telemetry from the last request when present, otherwise estimate this one."""
+    if isinstance(last_prompt_tokens, (int, float)) and last_prompt_tokens >= 0:
+        return int(last_prompt_tokens)
+    return estimate_tokens({'messages': history, 'tools': TOOLS})
+
+
+def compaction_level(tokens, thresholds):
+    if tokens >= thresholds['force']:
+        return 'force'
+    if tokens >= thresholds['warn']:
+        return 'warn'
+    if tokens >= thresholds['soft']:
+        return 'soft'
+    return None
+
+
+def compaction_notice(level, tokens, thresholds):
+    if level == 'warn':
+        return ('\nCONTEXT WARNING: this request is %d tokens, past the %d-token warning '
+                'threshold. Call self_compact now, before the next big read.\n' %
+                (tokens, thresholds['warn']))
+    if level == 'soft':
+        return ('\nCONTEXT NOTICE: this request is %d tokens, past the %d-token soft '
+                'threshold. Call self_compact at a natural stopping point; it is your tool.\n' %
+                (tokens, thresholds['soft']))
+    return ''
 
 
 KEY_VAR = os.environ.get('SWARM_OPENAI_KEY_VAR') or (
@@ -339,7 +404,7 @@ def cool_down(seconds):
         _interval[0] = min(MAX_INTERVAL, _interval[0] * 1.5)
 
 
-def one_turn_with_retries(req, history, raw, cancel):
+def one_turn_with_retries(req, history, raw, cancel, tools=TOOLS):
     """Five owners starting at once are exactly when the free tier says 503; one refused
     turn must not cost the swarm a whole agent. Errors that are not transient (401, 404,
     400) pass straight through."""
@@ -349,7 +414,8 @@ def one_turn_with_retries(req, history, raw, cancel):
             throttle(req, cancel)
             if cancel.is_set() or remaining_time(req) <= 0:
                 raise RuntimeError('cancelled or wall timeout before the API request')
-            result = one_turn(req, history, raw, cancel)
+            result = one_turn(req, history, raw, cancel) if tools is TOOLS \
+                else one_turn(req, history, raw, cancel, tools)
             accepted()
             return result
         except urllib.error.HTTPError as exc:
@@ -451,12 +517,15 @@ def response_lines(request, req, cancel):
                 pass
 
 
-def one_turn(req, history, raw, cancel):
+def one_turn(req, history, raw, cancel, tools=TOOLS):
     """One streamed completion. Returns (text, [tool call], finish_reason, usage delta)."""
     budget = getattr(req, '_agent_budget', None)
-    max_tokens = budget.allocate({'messages': history, 'tools': TOOLS}, MAX_TOKENS) if budget else MAX_TOKENS
-    body = {'model': req.model, 'messages': history, 'tools': TOOLS, 'max_tokens': max_tokens,
+    request_context = {'messages': history, 'tools': tools}
+    max_tokens = budget.allocate(request_context, MAX_TOKENS) if budget else MAX_TOKENS
+    body = {'model': req.model, 'messages': history, 'max_tokens': max_tokens,
             'temperature': 1, 'stream': True, 'stream_options': {'include_usage': True}}
+    if tools:
+        body['tools'] = tools
     if EFFORT:
         body['reasoning_effort'] = EFFORT
     headers = {'Content-Type': 'application/json', 'Accept': 'text/event-stream'}
@@ -507,13 +576,47 @@ def one_turn(req, history, raw, cancel):
     return ''.join(texts), [calls[i] for i in sorted(calls)], finish, used
 
 
+def compact_history(req, history, original_prompt, raw, cancel, budget, total, tokens, cycle,
+                    forced, note):
+    """Summarize the old loop once, then retain only the task and the resumable handoff."""
+    summary = ''
+    summary_history = history + [{'role': 'user', 'content': COMPACTION_PROMPT}]
+    summary_context = {'messages': summary_history, 'tools': []}
+    if remaining_time(req) > 0:
+        try:
+            budget.allocate(summary_context, MAX_TOKENS)
+        except RuntimeError:
+            pass                    # no remaining budget: the agent's own note still survives
+        else:
+            text, calls, finish, used = one_turn_with_retries(
+                req, summary_history, raw, cancel, tools=[])
+            for key in total:
+                total[key] += (used or {}).get(key) or 0
+            budget.record(used, summary_context, {'text': text, 'calls': calls})
+            budget.publish()
+            summary = text
+    handoff = 'Context compaction handoff.'
+    if summary:
+        handoff += '\n\nSummary:\n' + summary
+    handoff += '\n\nNote to self (verbatim):\n' + note
+    history = [original_prompt, {'role': 'user', 'content': handoff}]
+    after = estimate_tokens({'messages': history, 'tools': TOOLS})
+    raw.write(json.dumps({'compaction': cycle, 'before': tokens, 'after': after,
+                          'forced': forced, 'note': note}) + '\n')
+    raw.flush()
+    return history, after
+
+
 def invoke(req: AgentRequest, messages, cancel):
     budget = AgentBudget(req)
     req._agent_budget = budget
     budget.publish(messages)
-    history = [{'role': 'user', 'content': req.prompt + budget.note()}]
+    original_prompt = {'role': 'user', 'content': req.prompt}
+    history = [original_prompt]
+    thresholds = compact_thresholds()
     total = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
     texts, error, steps, tool_steps, nudged = [], None, 0, 0, 0
+    last_prompt_tokens, compactions, force_pending = None, 0, False
     # The CLI runners get their deadline from watch(); this loop owns its own, so a model that
     # keeps calling tools cannot outlive the call budget the swarm allocated it.
     req._deadline = time.monotonic() + req.timeout
@@ -523,6 +626,21 @@ def invoke(req: AgentRequest, messages, cancel):
             if cancel.is_set() or remaining_time(req) <= 0:
                 error = 'out of time after %d tool steps (%ss budget)' % (steps, req.timeout)
                 break
+            if force_pending:
+                before = context_tokens(history, last_prompt_tokens)
+                try:
+                    history, last_prompt_tokens = compact_history(
+                        req, history, original_prompt, raw, cancel, budget, total, before,
+                        compactions + 1, True,
+                        'Forced compaction after the context threshold was reached.')
+                except Exception as exc:
+                    error = '%s: %s' % (type(exc).__name__, exc)
+                    break
+                compactions += 1
+                force_pending = False
+                if budget.total > budget.limit or budget.output > budget.output_limit:
+                    error = 'token budget exceeded after compaction usage accounting'
+                    break
             steps += 1
             try:
                 budget.allocate({'messages': history, 'tools': TOOLS}, MAX_TOKENS)
@@ -543,6 +661,8 @@ def invoke(req: AgentRequest, messages, cancel):
             if budget.total > budget.limit or budget.output > budget.output_limit:
                 error = 'token budget exceeded after API usage accounting'
                 break
+            last_prompt_tokens = (used or {}).get('prompt_tokens') \
+                if isinstance((used or {}).get('prompt_tokens'), (int, float)) else None
             if text:
                 texts.append(text)
             if not calls:
@@ -584,6 +704,8 @@ def invoke(req: AgentRequest, messages, cancel):
                     continue
                 break
             tool_steps += 1
+            current_context = context_tokens(history, last_prompt_tokens)
+            level = compaction_level(current_context, thresholds)
             history.append({'role': 'assistant', 'content': text or None, 'tool_calls': [
                 {'id': c['id'] or ('call_%d' % i), 'type': 'function',
                  'function': {'name': c['name'], 'arguments': c['arguments']}}
@@ -595,16 +717,53 @@ def invoke(req: AgentRequest, messages, cancel):
                 try:
                     args = json.loads(call['arguments'] or '{}')
                 except json.JSONDecodeError:
-                    args, result = {}, 'ERROR: your arguments were not valid JSON'
+                    args = {}
+                    if level == 'force' and call['name'] != 'self_compact':
+                        result = ('REFUSED: this request is %d tokens, past the %d-token force '
+                                  'threshold. self_compact is the only tool allowed now; call it '
+                                  'with note_to_self.' % (current_context, thresholds['force']))
+                        force_pending = True
+                    else:
+                        result = 'ERROR: your arguments were not valid JSON'
                 else:
-                    try:
-                        result = run_tool(req, call['name'], args)
-                    except Exception as exc:
-                        result = 'ERROR: %s: %s' % (type(exc).__name__, exc)
+                    result = None
+                    if call['name'] == 'self_compact':
+                        note = str(args.get('note_to_self') or '')
+                        # The summary request still sees a protocol-complete old conversation,
+                        # even when this response contained parallel calls that are discarded.
+                        for pending_index, pending in enumerate(calls[i:], i):
+                            history.append({
+                                'role': 'tool',
+                                'tool_call_id': pending['id'] or ('call_%d' % pending_index),
+                                'content': ('Self-compaction requested.' if pending is call else
+                                            'Not run: context compacted by self_compact.')})
+                        try:
+                            history, last_prompt_tokens = compact_history(
+                                req, history, original_prompt, raw, cancel, budget, total,
+                                current_context, compactions + 1, False, note)
+                        except Exception as exc:
+                            error = '%s: %s' % (type(exc).__name__, exc)
+                        else:
+                            compactions += 1
+                        tool_event(messages, req, call['name'], {'parameters': {}})
+                        break
+                    if level == 'force':
+                        result = ('REFUSED: this request is %d tokens, past the %d-token force '
+                                  'threshold. self_compact is the only tool allowed now; call it '
+                                  'with note_to_self.' % (current_context, thresholds['force']))
+                        force_pending = True
+                    else:
+                        try:
+                            result = run_tool(req, call['name'], args)
+                        except Exception as exc:
+                            result = 'ERROR: %s: %s' % (type(exc).__name__, exc)
                 tool_event(messages, req, call['name'], {'parameters': {
                     k: str(v)[:120] for k, v in args.items() if k in ('path', 'command')}})
                 history.append({'role': 'tool', 'tool_call_id': call['id'] or ('call_%d' % i),
-                                'content': result + budget.note()})
+                                'content': result + budget.note() +
+                                           compaction_notice(level, current_context, thresholds)})
+                if error:
+                    break
         else:
             error = 'gave up after %d tool steps without a final answer' % MAX_STEPS
     close_job(req.job)
@@ -614,6 +773,7 @@ def invoke(req: AgentRequest, messages, cancel):
                  cost=None)
     used['usage_status'] = budget.status
     used['output_tokens'] = budget.output if budget.status != 'unknown' else None
+    used['compactions'] = compactions
     if not error and not any(t.strip() for t in texts):
         error = 'produced no reply text in %d steps' % steps
     return deliver(req, texts, used, error, steps=steps)
