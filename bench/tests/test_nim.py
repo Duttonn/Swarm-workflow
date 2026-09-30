@@ -498,6 +498,28 @@ class SelfCompaction(unittest.TestCase):
         self.assertEqual(event['note'], note)
         self.assertFalse(event['forced'])
 
+    def test_a_floor_above_the_force_threshold_stops_re_forcing(self):
+        # Measured live on nemotron with 200/400/600: a task prompt plus its handoff is about
+        # 1,600 tokens, so every forced compaction landed above the force threshold and the
+        # harness forced another one - fourteen of them, 43,509 tokens, until the budget was
+        # gone. Once compaction has shown what it can reach, the force threshold stands down.
+        self.configure('1', '2', '3')
+        read = self.call('read_file', '{"path": "a.txt"}')
+        _, extra, seen, folder = self.drive([
+            ('', [read], 'tool_calls', self.used(30)),
+            ('goal done; next: read the file.', [], 'stop', self.used(31)),
+            ('', [read], 'tool_calls', self.used(40)),
+            (self.ENVELOPE, [], 'stop', self.used(41)),
+        ])
+        self.assertEqual(extra['usage']['compactions'], 1)
+        results = [message['content'] for message in seen[3] if message['role'] == 'tool']
+        self.assertNotIn('REFUSED', results[-1])
+        self.assertIn('CONTEXT WARNING', results[-1])
+        floor = next(json.loads(line) for line
+                     in (folder / 'events.jsonl').read_text().splitlines()
+                     if 'compaction_floor' in line)
+        self.assertGreaterEqual(floor['compaction_floor'], floor['force_threshold'])
+
     def test_thresholds_accept_suffixes_and_plain_integers(self):
         self.assertEqual(nim.parse_context_tokens('60k'), 60000)
         self.assertEqual(nim.parse_context_tokens('1M'), 1000000)

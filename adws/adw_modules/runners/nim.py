@@ -174,7 +174,11 @@ def context_tokens(history, last_prompt_tokens=None):
     return estimate_tokens({'messages': history, 'tools': TOOLS})
 
 
-def compaction_level(tokens, thresholds):
+def compaction_level(tokens, thresholds, floor=0):
+    # A floor above the force threshold means compaction cannot reach it; stop forcing and let
+    # the warning stand, so the agent keeps working instead of compacting on every step.
+    if floor and floor >= thresholds['force']:
+        thresholds = dict(thresholds, force=float('inf'))
     if tokens >= thresholds['force']:
         return 'force'
     if tokens >= thresholds['warn']:
@@ -616,7 +620,7 @@ def invoke(req: AgentRequest, messages, cancel):
     thresholds = compact_thresholds()
     total = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
     texts, error, steps, tool_steps, nudged = [], None, 0, 0, 0
-    last_prompt_tokens, compactions, force_pending = None, 0, False
+    last_prompt_tokens, compactions, force_pending, compact_floor = None, 0, False, 0
     # The CLI runners get their deadline from watch(); this loop owns its own, so a model that
     # keeps calling tools cannot outlive the call budget the swarm allocated it.
     req._deadline = time.monotonic() + req.timeout
@@ -638,6 +642,14 @@ def invoke(req: AgentRequest, messages, cancel):
                     break
                 compactions += 1
                 force_pending = False
+                compact_floor = max(compact_floor, last_prompt_tokens or 0)
+                if compact_floor >= thresholds['force']:
+                    raw.write(json.dumps({'compaction_floor': compact_floor,
+                                          'force_threshold': thresholds['force'],
+                                          'note': 'the task and its handoff do not fit under the '
+                                                  'force threshold; no further forced compaction'})
+                              + '\n')
+                    raw.flush()
                 if budget.total > budget.limit or budget.output > budget.output_limit:
                     error = 'token budget exceeded after compaction usage accounting'
                     break
@@ -705,7 +717,7 @@ def invoke(req: AgentRequest, messages, cancel):
                 break
             tool_steps += 1
             current_context = context_tokens(history, last_prompt_tokens)
-            level = compaction_level(current_context, thresholds)
+            level = compaction_level(current_context, thresholds, compact_floor)
             history.append({'role': 'assistant', 'content': text or None, 'tool_calls': [
                 {'id': c['id'] or ('call_%d' % i), 'type': 'function',
                  'function': {'name': c['name'], 'arguments': c['arguments']}}
@@ -745,6 +757,7 @@ def invoke(req: AgentRequest, messages, cancel):
                             error = '%s: %s' % (type(exc).__name__, exc)
                         else:
                             compactions += 1
+                            compact_floor = max(compact_floor, last_prompt_tokens or 0)
                         tool_event(messages, req, call['name'], {'parameters': {}})
                         break
                     if level == 'force':
